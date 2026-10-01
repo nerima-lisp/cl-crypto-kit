@@ -49,4 +49,5 @@
 (dolist (v +rfc-hmac+) (destructuring-bind (a k d e) v (let ((actual (hmac a (bytes k) (bytes d)))) (checkv actual e "RFC HMAC") (when (string= d "546573742057697468205472756e636174696f6e") (checkv (subseq actual 0 16) (subseq e 0 32) "RFC HMAC truncation")))))
  (dolist (v +rfc-hkdf+) (destructuring-bind (a i s info n p o) v (checkv (hkdf-extract a (bytes s) (bytes i)) p "RFC HKDF extract") (checkv (hkdf-expand a (bytes p) (bytes info) n) o "RFC HKDF expand")))
  (run-nist-shavs-tests)
+ (run-chacha-tests)
  (format t "cl-crypto-kit: RFC HMAC ~D, RFC HKDF ~D vectors passed~%" (length +rfc-hmac+) (length +rfc-hkdf+)) t)

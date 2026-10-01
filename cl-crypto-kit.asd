@@ -11,6 +11,6 @@
 
 (asdf:defsystem "cl-crypto-kit/test"
   :depends-on ("cl-crypto-kit") :pathname "t" :serial t
-  :components ((:file "tests") (:file "nist-shavs"))
+  :components ((:file "tests") (:file "nist-shavs") (:file "tests-chacha"))
   :perform (asdf:test-op (op c) (declare (ignore op c))
              (uiop:symbol-call "CRYPTO-KIT/TEST" "RUN-TESTS")))
