@@ -45,7 +45,7 @@
           clWeave = cl-weave.packages.${system}.default;
         in {
           test = pkgs.runCommand "cl-crypto-kit-check" {
-            nativeBuildInputs = [ pkgs.sbcl clWeave ];
+            nativeBuildInputs = [ pkgs.sbcl pkgs.openssl clWeave ];
           } ''
             cp -r ${self} source
             export XDG_CACHE_HOME="$TMPDIR/cl-crypto-kit-cache"
@@ -54,6 +54,7 @@
             sbcl --noinform --non-interactive \
               --eval '(require :asdf)' \
               --eval '(asdf:test-system "cl-crypto-kit")'
+            bash scripts/crypto-hash-openssl.sh
             touch "$out"
           '';
         });

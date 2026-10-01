@@ -4,6 +4,9 @@
 (defconstant +u32+ #xffffffff)
 (defconstant +u64+ #xffffffffffffffff)
 
+(declaim (optimize (speed 3) (safety 1) (debug 0)))
+(declaim (inline mask-word rotr rotl32 read-be put-be))
+
 (defun mask-word (value bits) (ldb (byte bits 0) value))
 (defun rotr (value count bits)
   (let ((value (mask-word value bits)))
@@ -12,8 +15,8 @@
 (defun rotl32 (value count)
   (let ((value (mask-word value 32)))
     (mask-word (logior (ash value count) (ash value (- count 32))) 32)))
-(defun addmod (bits &rest values)
-  (mask-word (reduce #'+ values :initial-value 0) bits))
+(defmacro addmod (bits &rest values)
+  `(mask-word (+ ,@values) ,bits))
 (defun read-be (octets start size)
   (let ((value 0))
     (loop for i below size
@@ -32,6 +35,7 @@
       (replace out vector :start1 position)
       (incf position (length vector)))))
 
+(defparameter +sha1-k+ #( #x5a827999 #x6ed9eba1 #x8f1bbcdc #xca62c1d6))
 (defparameter +sha256-k+
   #( #x428a2f98 #x71374491 #xb5c0fbcf #xe9b5dba5 #x3956c25b #x59f111f1
      #x923f82a4 #xab1c5ed5 #xd807aa98 #x12835b01 #x243185be #x550c7dc3
@@ -101,17 +105,18 @@
                              ((< i 40) (logxor b c d))
                              ((< i 60) (logior (logand b c) (logand b d) (logand c d)))
                              (t (logxor b c d))))
-                    (k (aref #( #x5a827999 #x6ed9eba1 #x8f1bbcdc #xca62c1d6)
-                             (floor i 20)))
+                    (k (aref +sha1-k+ (floor i 20)))
                     (t1 (addmod 32 (rotl32 a 5) f e k (aref w i))))
                (psetf e d d c c (rotl32 b 30) b a a t1)))
     (loop for i below 5 for value in (list a b c d e)
           do (setf (aref h i) (addmod 32 (aref h i) value))) h))
 
 (defun sha256-compress (h block)
-  (let ((w (make-array 64 :initial-element 0))
-        (v (vector (aref h 0) (aref h 1) (aref h 2) (aref h 3)
-                   (aref h 4) (aref h 5) (aref h 6) (aref h 7))))
+  (let ((w (make-array 64 :element-type '(unsigned-byte 32) :initial-element 0))
+        (v (make-array 8 :element-type '(unsigned-byte 32))))
+    (declare (type (simple-array (unsigned-byte 32) (*)) w v)
+             (dynamic-extent w v))
+    (replace v h)
     (loop for i below 16 do (setf (aref w i) (read-be block (* i 4) 4)))
     (loop for i from 16 below 64
           do (let ((x (aref w (- i 15))) (y (aref w (- i 2))))
@@ -130,16 +135,20 @@
                     (s0 (logxor (rotr a 2 32) (rotr a 13 32) (rotr a 22 32)))
                     (maj (logxor (logand a b) (logand a c) (logand b c)))
                     (t2 (addmod 32 s0 maj)))
-               (setf v (vector (addmod 32 t1 t2) a b c
-                               (addmod 32 d t1) e f g))))
+               (let ((new-a (addmod 32 t1 t2))
+                     (new-e (addmod 32 d t1)))
+                 (setf (aref v 0) new-a (aref v 1) a (aref v 2) b (aref v 3) c
+                       (aref v 4) new-e (aref v 5) e (aref v 6) f (aref v 7) g))))
     (loop for i below 8 for value across v
           do (setf (aref h i) (addmod 32 (aref h i) value))
           finally (return h))))
 
 (defun sha512-compress (h block)
-  (let ((w (make-array 80 :initial-element 0))
-        (v (vector (aref h 0) (aref h 1) (aref h 2) (aref h 3)
-                   (aref h 4) (aref h 5) (aref h 6) (aref h 7))))
+  (let ((w (make-array 80 :element-type '(unsigned-byte 64) :initial-element 0))
+        (v (make-array 8 :element-type '(unsigned-byte 64))))
+    (declare (type (simple-array (unsigned-byte 64) (*)) w v)
+             (dynamic-extent w v))
+    (replace v h)
     (loop for i below 16 do (setf (aref w i) (read-be block (* i 8) 8)))
     (loop for i from 16 below 80
           do (let ((x (aref w (- i 15))) (y (aref w (- i 2))))
@@ -158,8 +167,10 @@
                     (s0 (logxor (rotr a 28 64) (rotr a 34 64) (rotr a 39 64)))
                     (maj (logxor (logand a b) (logand a c) (logand b c)))
                     (t2 (addmod 64 s0 maj)))
-               (setf v (vector (addmod 64 t1 t2) a b c
-                               (addmod 64 d t1) e f g))))
+               (let ((new-a (addmod 64 t1 t2))
+                     (new-e (addmod 64 d t1)))
+                 (setf (aref v 0) new-a (aref v 1) a (aref v 2) b (aref v 3) c
+                       (aref v 4) new-e (aref v 5) e (aref v 6) f (aref v 7) g))))
     (loop for i below 8 for value across v
           do (setf (aref h i) (addmod 64 (aref h i) value))
           finally (return h))))
@@ -174,9 +185,11 @@
          (all (make-array (+ (length old) (- end start)) :element-type '(unsigned-byte 8))))
     (replace all old) (replace all input :start1 (length old) :start2 start :end2 end)
     (loop with block-size = (nth-value 2 (digest-params (digest-state-algorithm state)))
+          with block = (make-array block-size :element-type '(unsigned-byte 8))
           for position from 0 by block-size
           while (<= (+ position block-size) (length all))
-          do (compress state (subseq all position (+ position block-size)))
+          do (replace block all :start2 position :end2 (+ position block-size))
+             (compress state block)
           finally (setf (digest-state-buffer state) (subseq all position)))
     (incf (digest-state-length state) (- end start)) state))
 (defun digest-copy (state)
