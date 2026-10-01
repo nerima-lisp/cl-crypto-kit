@@ -1,25 +1,43 @@
 (in-package #:crypto-kit)
 
+(declaim (inline %aes-xtime %aes-gf-mul %aes-sbox)
+         (ftype (function ((unsigned-byte 8)) (unsigned-byte 8)) %aes-xtime %aes-sbox)
+         (ftype (function ((unsigned-byte 8) (unsigned-byte 8)) (unsigned-byte 8)) %aes-gf-mul)
+         (optimize (speed 3) (safety 0) (debug 0)))
+
 (defstruct (aes-context (:constructor %make-aes-context (round-keys rounds)))
   round-keys rounds)
 
 (defun %aes-xtime (x)
+  (declare (type (unsigned-byte 8) x))
   (logand #xff
           (logxor (ash x 1)
                   (logand #x1b (- (ash x -7))))))
 
 (defun %aes-gf-mul (a b)
+  (declare (type (unsigned-byte 8) a b))
   (let ((r 0))
+    (declare (type (unsigned-byte 8) r))
     (dotimes (i 8 r)
       (setf r (logxor r (logand a (- (logand b 1)))))
       (setf a (%aes-xtime a) b (ash b -1)))))
 
 (defun %aes-sbox (x)
-  (let ((y (if (zerop x) 0 (loop with p = 1 with q = 1
-                                  repeat 254 do
-                                    (setf p (%aes-gf-mul p x)
-                                          q (%aes-gf-mul q x))
-                                  finally (return q)))))
+  ;; The inverse is x^254.  This fixed addition chain also maps zero to zero,
+  ;; so S-box evaluation has no input-dependent branch or table lookup.
+  (declare (type (unsigned-byte 8) x))
+  (let* ((x (logand x #xff))
+         (x2 (%aes-gf-mul x x))
+         (x4 (%aes-gf-mul x2 x2))
+         (x8 (%aes-gf-mul x4 x4))
+         (x16 (%aes-gf-mul x8 x8))
+         (x32 (%aes-gf-mul x16 x16))
+         (x64 (%aes-gf-mul x32 x32))
+         (x128 (%aes-gf-mul x64 x64))
+         (y (%aes-gf-mul
+             (%aes-gf-mul (%aes-gf-mul x2 x4) x8)
+             (%aes-gf-mul (%aes-gf-mul x16 x32)
+                          (%aes-gf-mul x64 x128)))))
     (flet ((rot (n) (logand #xff (logior (ash y n) (ash y (- n 8))))))
       (logand #xff (logxor y (rot 1) (rot 2) (rot 3) (rot 4) #x63)))))
 
@@ -27,7 +45,7 @@
   (logior (ash (%aes-sbox (ldb (byte 8 24) word)) 24)
           (ash (%aes-sbox (ldb (byte 8 16) word)) 16)
           (ash (%aes-sbox (ldb (byte 8 8) word)) 8)
-          (%aes-sbox word)))
+          (%aes-sbox (ldb (byte 8 0) word))))
 
 (defun %aes-key-expansion (key)
   (let* ((nk (/ (length key) 4)) (nr (+ nk 6))
@@ -58,6 +76,7 @@
     (%make-aes-context round-keys rounds)))
 
 (defun aes-128 (key) (%aes-make key 16))
+(defun aes-192 (key) (%aes-make key 24))
 (defun aes-256 (key) (%aes-make key 32))
 
 (defun %aes-add-round-key (state keys round)
@@ -68,15 +87,29 @@
               (logxor (aref state (+ (* c 4) r))
                       (ldb (byte 8 (* 8 (- 3 r))) word)))))))
 
-(defun %aes-sub-bytes (state)
-  (dotimes (i 16) (setf (aref state i) (%aes-sbox (aref state i)))))
+(defun %aes-sub-bytes (state planes)
+  (fill planes 0)
+    (dotimes (index 16)
+      (let ((value (aref state index)))
+        (dotimes (bit 8)
+          (setf (aref planes bit)
+                (logior (aref planes bit)
+                        (ash (ldb (byte 1 bit) value) index))))))
+    (%aes-bitslice-sbox planes)
+    (dotimes (index 16)
+      (let ((value 0))
+        (dotimes (bit 8)
+          (setf value (logior value (ash (ldb (byte 1 index) (aref planes bit)) bit))))
+        (setf (aref state index) value)))
+    state)
 
 (defun %aes-shift-rows (s)
-  (let ((old (copy-seq s)))
-    (dotimes (r 4)
-      (dotimes (c 4)
-        (setf (aref s (+ (* c 4) r))
-              (aref old (+ (* (mod (+ c r) 4) 4) r)))))))
+  (let ((a1 (aref s 1)) (a5 (aref s 5)) (a9 (aref s 9)) (a13 (aref s 13))
+        (a2 (aref s 2)) (a6 (aref s 6)) (a10 (aref s 10)) (a14 (aref s 14))
+        (a3 (aref s 3)) (a7 (aref s 7)) (a11 (aref s 11)) (a15 (aref s 15)))
+    (setf (aref s 1) a5 (aref s 5) a9 (aref s 9) a13 (aref s 13) a1
+          (aref s 2) a10 (aref s 6) a14 (aref s 10) a2 (aref s 14) a6
+          (aref s 3) a15 (aref s 7) a3 (aref s 11) a7 (aref s 15) a11)))
 
 (defun %aes-mix-columns (s)
   (dotimes (c 4)
@@ -87,15 +120,25 @@
             (aref s (+ p 2)) (logxor a0 a1 (%aes-gf-mul a2 2) (%aes-gf-mul a3 3))
             (aref s (+ p 3)) (logxor (%aes-gf-mul a0 3) a1 a2 (%aes-gf-mul a3 2))))))
 
-(defun aes-encrypt-block (cipher block)
-  (let* ((ctx (if (typep cipher 'aes-context) cipher
-                  (if (= (length cipher) 16) (aes-128 cipher) (aes-256 cipher))))
-         (state (copy-seq block)) (keys (aes-context-round-keys ctx))
-         (rounds (aes-context-rounds ctx)))
+(defun %aes-encrypt-block-into (ctx block state planes)
+  (replace state block)
+  (let ((keys (aes-context-round-keys ctx))
+        (rounds (aes-context-rounds ctx)))
     (unless (= (length block) 16) (error "AES blocks are 16 bytes"))
     (%aes-add-round-key state keys 0)
     (loop for round from 1 below rounds do
-      (%aes-sub-bytes state) (%aes-shift-rows state) (%aes-mix-columns state)
+      (%aes-sub-bytes state planes) (%aes-shift-rows state) (%aes-mix-columns state)
       (%aes-add-round-key state keys round))
-    (%aes-sub-bytes state) (%aes-shift-rows state) (%aes-add-round-key state keys rounds)
+    (%aes-sub-bytes state planes) (%aes-shift-rows state) (%aes-add-round-key state keys rounds)
     state))
+
+(defun aes-encrypt-block (cipher block)
+  (let* ((ctx (if (typep cipher 'aes-context) cipher
+                  (ecase (length cipher)
+                    (16 (aes-128 cipher))
+                    (24 (aes-192 cipher))
+                    (32 (aes-256 cipher)))))
+         (state (make-array 16 :element-type '(unsigned-byte 8)))
+         (planes (make-array 8 :element-type '(unsigned-byte 16)
+                             :initial-element 0)))
+    (%aes-encrypt-block-into ctx block state planes)))
