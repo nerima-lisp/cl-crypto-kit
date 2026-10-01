@@ -1,15 +1,23 @@
 (in-package #:crypto-kit)
 
+(declaim (inline %aes-xtime %aes-gf-mul %aes-sbox)
+         (ftype (function ((unsigned-byte 8)) (unsigned-byte 8)) %aes-xtime %aes-sbox)
+         (ftype (function ((unsigned-byte 8) (unsigned-byte 8)) (unsigned-byte 8)) %aes-gf-mul)
+         (optimize (speed 3) (safety 0) (debug 0)))
+
 (defstruct (aes-context (:constructor %make-aes-context (round-keys rounds)))
   round-keys rounds)
 
 (defun %aes-xtime (x)
+  (declare (type (unsigned-byte 8) x))
   (logand #xff
           (logxor (ash x 1)
                   (logand #x1b (- (ash x -7))))))
 
 (defun %aes-gf-mul (a b)
+  (declare (type (unsigned-byte 8) a b))
   (let ((r 0))
+    (declare (type (unsigned-byte 8) r))
     (dotimes (i 8 r)
       (setf r (logxor r (logand a (- (logand b 1)))))
       (setf a (%aes-xtime a) b (ash b -1)))))
@@ -17,6 +25,7 @@
 (defun %aes-sbox (x)
   ;; The inverse is x^254.  This fixed addition chain also maps zero to zero,
   ;; so S-box evaluation has no input-dependent branch or table lookup.
+  (declare (type (unsigned-byte 8) x))
   (let* ((x (logand x #xff))
          (x2 (%aes-gf-mul x x))
          (x4 (%aes-gf-mul x2 x2))
@@ -67,6 +76,7 @@
     (%make-aes-context round-keys rounds)))
 
 (defun aes-128 (key) (%aes-make key 16))
+(defun aes-192 (key) (%aes-make key 24))
 (defun aes-256 (key) (%aes-make key 32))
 
 (defun %aes-add-round-key (state keys round)
@@ -98,7 +108,10 @@
 
 (defun aes-encrypt-block (cipher block)
   (let* ((ctx (if (typep cipher 'aes-context) cipher
-                  (if (= (length cipher) 16) (aes-128 cipher) (aes-256 cipher))))
+                  (ecase (length cipher)
+                    (16 (aes-128 cipher))
+                    (24 (aes-192 cipher))
+                    (32 (aes-256 cipher)))))
          (state (copy-seq block)) (keys (aes-context-round-keys ctx))
          (rounds (aes-context-rounds ctx)))
     (unless (= (length block) 16) (error "AES blocks are 16 bytes"))
