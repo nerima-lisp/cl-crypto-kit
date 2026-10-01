@@ -2,10 +2,6 @@
 
 ;; Keep the AES-GCM implementation supplied by gcm.lisp reachable after this
 ;; file installs the algorithm-dispatching definitions below.
-(unless (fboundp '%gcm-aead-seal)
-  (setf (symbol-function '%gcm-aead-seal) (symbol-function 'aead-seal)
-        (symbol-function '%gcm-aead-open) (symbol-function 'aead-open)))
-
 (defun %chacha-xor (left right)
   (let ((result (make-array (length left) :element-type '(unsigned-byte 8))))
     (dotimes (index (length left) result)
@@ -68,8 +64,8 @@
      (unless (= (length nonce) 12)
        (crypto-error "ChaCha20-Poly1305 requires a 12-octet nonce"))
      (%chacha-aead-seal key nonce plaintext aad))
-    ((:aes-128-gcm :aes-256-gcm)
-     (funcall (symbol-function '%gcm-aead-seal) algorithm key nonce plaintext aad))
+    ((:aes-128-gcm :aes-192-gcm :aes-256-gcm)
+     (%aes-gcm-aead-seal algorithm key nonce plaintext aad))
     (otherwise (error "Unsupported AEAD algorithm: ~S" algorithm))))
 
 (defun aead-open (algorithm key nonce ciphertext-and-tag aad)
@@ -80,7 +76,6 @@
      (unless (= (length nonce) 12)
        (crypto-error "ChaCha20-Poly1305 requires a 12-octet nonce"))
      (%chacha-aead-open key nonce ciphertext-and-tag aad))
-    ((:aes-128-gcm :aes-256-gcm)
-     (funcall (symbol-function '%gcm-aead-open)
-              algorithm key nonce ciphertext-and-tag aad))
+    ((:aes-128-gcm :aes-192-gcm :aes-256-gcm)
+     (%aes-gcm-aead-open algorithm key nonce ciphertext-and-tag aad))
     (otherwise (error "Unsupported AEAD algorithm: ~S" algorithm))))

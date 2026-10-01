@@ -123,7 +123,7 @@
          (hash-key (aes-encrypt-block cipher zero)))
     (values hash-key (%gcm-j0 hash-key nonce))))
 
-(defun aead-seal (algorithm key nonce plaintext aad)
+(defun %aes-gcm-aead-seal (algorithm key nonce plaintext aad)
   "Return AES-GCM ciphertext concatenated with its 16-octet tag."
   (unless (member algorithm '(:aes-128-gcm :aes-192-gcm :aes-256-gcm))
     (error "Unsupported AEAD algorithm: ~S" algorithm))
@@ -141,7 +141,7 @@
           (replace output tag :start1 (length ciphertext))
           output)))))
 
-(defun aead-open (algorithm key nonce ciphertext-and-tag aad)
+(defun %aes-gcm-aead-open (algorithm key nonce ciphertext-and-tag aad)
   "Authenticate and decrypt AES-GCM ciphertext concatenated with its tag."
   (unless (member algorithm '(:aes-128-gcm :aes-192-gcm :aes-256-gcm))
     (error "Unsupported AEAD algorithm: ~S" algorithm))
