@@ -1,1 +1,1 @@
-(in-package #:cl-crypto-kit)
+(in-package #:crypto-kit)
