@@ -104,7 +104,23 @@
           (handler-case
               (progn (aead-open :chacha20-poly1305 key nonce tampered aad)
                      (error "AEAD accepted modified tag"))
-            (aead-authentication-failure () (incf checks)))))
+            (aead-authentication-failure () (incf checks))))
+        (let ((tampered-aad (copy-seq aad)))
+          (setf (aref tampered-aad 0) (logxor (aref tampered-aad 0) 1))
+          (handler-case
+              (progn (aead-open :chacha20-poly1305 key nonce sealed tampered-aad)
+                     (error "AEAD accepted modified AAD"))
+            (aead-authentication-failure () (incf checks))))
+        (let ((tampered-nonce (copy-seq nonce)))
+          (setf (aref tampered-nonce 0) (logxor (aref tampered-nonce 0) 1))
+          (handler-case
+              (progn (aead-open :chacha20-poly1305 key tampered-nonce sealed aad)
+                     (error "AEAD accepted modified nonce"))
+            (aead-authentication-failure () (incf checks))))
+        (let ((empty-sealed (aead-seal :chacha20-poly1305 key nonce #() aad)))
+          (check (= 16 (length empty-sealed)) "ChaCha20-Poly1305 empty seal length")
+          (check (equalp (aead-open :chacha20-poly1305 key nonce empty-sealed aad) #())
+                 "ChaCha20-Poly1305 empty round-trip")))
 
       ;; A long, non-aligned AEAD message must round-trip without truncation.
       (let* ((key (make-array 32 :element-type '(unsigned-byte 8)
