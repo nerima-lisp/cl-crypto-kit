@@ -13,7 +13,6 @@ Apache-2.0 license.
 | `rsa_signature_3072_sha256_test.json` | 259 | valid=8, acceptable=1, invalid=250 |
 | `rsa_pss_2048_sha256_mgf1_0_test.json` | 103 | valid=61, invalid=42 |
 | `rsa_pss_2048_sha256_mgf1_32_test.json` | 108 | valid=63, invalid=45 |
-| `rsa_pss_2048_sha384_mgf1_48_test.json` | 141 | SHA-384 PSS |
 | `rsa_pss_3072_sha256_mgf1_32_test.json` | 108 | valid=63, invalid=45 |
 | `rsa_pss_4096_sha256_mgf1_32_test.json` | 108 | valid=63, invalid=45 |
 
