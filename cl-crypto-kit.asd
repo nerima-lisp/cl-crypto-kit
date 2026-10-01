@@ -6,12 +6,13 @@
   :depends-on () :pathname "src" :serial t
   :components ((:file "package") (:file "conditions") (:file "hash")
                (:file "hmac-hkdf") (:file "aes") (:file "gcm")
-               (:file "chacha20") (:file "poly1305") (:file "chacha20-poly1305"))
+               (:file "chacha20") (:file "poly1305") (:file "chacha20-poly1305")
+               (:file "rsa") (:file "rsa-pss"))
   :in-order-to ((test-op (test-op "cl-crypto-kit/test"))))
 
 (asdf:defsystem "cl-crypto-kit/test"
   :depends-on ("cl-crypto-kit") :pathname "t" :serial t
   :components ((:file "tests") (:file "nist-shavs") (:file "tests-aes-gcm")
-               (:file "wycheproof-aes-gcm"))
+               (:file "wycheproof-aes-gcm") (:file "tests-rsa"))
   :perform (asdf:test-op (op c) (declare (ignore op c))
              (uiop:symbol-call "CRYPTO-KIT/TEST" "RUN-TESTS")))
