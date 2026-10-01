@@ -9,7 +9,7 @@
                (:file "chacha20") (:file "poly1305") (:file "chacha20-poly1305")
                (:file "csprng") (:file "curve25519") (:file "ed25519")
                (:file "rsa") (:file "rsa-pss")
-               (:file "p256") (:file "p384") (:file "ecdsa"))
+               (:file "p256") (:file "p384") (:file "ecdsa") (:file "api"))
   :in-order-to ((test-op (test-op "cl-crypto-kit/test"))))
 
 (asdf:defsystem "cl-crypto-kit/test"

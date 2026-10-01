@@ -43,8 +43,7 @@
       checks = forEachSystem (system: pkgs:
         let
           clWeave = cl-weave.packages.${system}.default;
-        in {
-          test = pkgs.runCommand "cl-crypto-kit-check" {
+          check = pkgs.runCommand "cl-crypto-kit-check" {
             nativeBuildInputs = [ pkgs.sbcl pkgs.openssl clWeave ];
           } ''
             cp -r ${self} source
@@ -61,6 +60,9 @@
             bash scripts/crypto-hash-openssl.sh
             touch "$out"
           '';
+        in {
+          default = check;
+          test = check;
         });
       apps = forEachSystem (system: pkgs:
         let
