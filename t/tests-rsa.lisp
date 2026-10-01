@@ -75,7 +75,10 @@
 
 (defparameter +rsa-wycheproof-files+
   '(("rsa_signature_2048_sha256_test.json" :pkcs1 :sha256)
+    ("rsa_signature_2048_sha384_test.json" :pkcs1 :sha384)
+    ("rsa_signature_2048_sha512_test.json" :pkcs1 :sha512)
     ("rsa_signature_3072_sha256_test.json" :pkcs1 :sha256)
+    ("rsa_pss_2048_sha1_mgf1_20_test.json" :pss :sha1)
     ("rsa_pss_2048_sha256_mgf1_0_test.json" :pss :sha256)
     ("rsa_pss_2048_sha256_mgf1_32_test.json" :pss :sha256)
     ("rsa_pss_3072_sha256_mgf1_32_test.json" :pss :sha256)

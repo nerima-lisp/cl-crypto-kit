@@ -20,6 +20,7 @@ vectors=(
     "rsa_signature_2048_sha256_test.json|94a917b01ff50fb874cfc05bf29b4af44868d944a6558201cf18380da93fb393|259"
     "rsa_signature_2048_sha384_test.json|c571c105d261c0ff588a2888a529f152563fb3b77894b7620d4e4f8f934f2c1d|258"
     "rsa_signature_2048_sha512_test.json|16ea24b039905d054bdb6004f5fd179374e150b7b6d73a7ba654b6d00eab12ef|259"
+    "rsa_signature_3072_sha256_test.json|0f5f18cabfaad3e2792e82f7e9882f8999049b456714de924b8a5e202f61ca43|259"
     "rsa_pss_2048_sha1_mgf1_20_test.json|96d13ecdc356a24aec01dcbef7c5a15458b78373283113c294a60f8ddf717b29|88"
     "rsa_pss_2048_sha256_mgf1_0_test.json|b22a8d9a2e7e47f681d0ff1d1a55455daaf325d989c64ad005f848bd50b9b4c0|103"
     "rsa_pss_2048_sha256_mgf1_32_test.json|7f6efafc160f4816b96cbf1c12188a31051d7e3f001e27505d9edb5f2a0e325c|108"
