@@ -48,6 +48,11 @@
 (defun run-tests ()
 (dolist (v +rfc-hmac+) (destructuring-bind (a k d e) v (let ((actual (hmac a (bytes k) (bytes d)))) (checkv actual e "RFC HMAC") (when (string= d "546573742057697468205472756e636174696f6e") (checkv (subseq actual 0 16) (subseq e 0 32) "RFC HMAC truncation")))))
  (dolist (v +rfc-hkdf+) (destructuring-bind (a i s info n p o) v (checkv (hkdf-extract a (bytes s) (bytes i)) p "RFC HKDF extract") (checkv (hkdf-expand a (bytes p) (bytes info) n) o "RFC HKDF expand")))
+ (checkv (hkdf-extract :sha256
+                       (bytes "38762cf7f55934b34d179ae6a4c80cadccbb7f0a")
+                       (bytes "8394c8f03e515708"))
+         "7db5df06e7a69e432496adedb00851923595221596ae2ae9fb8115c1e9ed0a44"
+         "RFC 9001 5.1 initial secret")
  (run-nist-shavs-tests)
  (run-aes-gcm-tests)
  (run-wycheproof-aes-gcm-tests)
