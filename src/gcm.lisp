@@ -73,19 +73,22 @@
         (%gcm-bytes y 16))))
 
 (defun %gcm-inc32 (counter)
-  (loop for index downfrom 15 to 12
-        do (let ((value (1+ (aref counter index))))
-             (setf (aref counter index) (logand #xff value))
-             (when (< value 256) (return))))
+  (let ((carry 1))
+    (loop for index downfrom 15 to 12
+          do (let ((value (+ (aref counter index) carry)))
+               (setf (aref counter index) (logand #xff value)
+                     carry (logand carry (- (ldb (byte 1 8) value)))))))
   counter)
 
 (defun %gcm-ctr (cipher j0 input)
   (let ((output (make-array (length input) :element-type '(unsigned-byte 8)))
         (counter (copy-seq j0))
-        (stream (make-array 16 :element-type '(unsigned-byte 8))))
+        (stream (make-array 16 :element-type '(unsigned-byte 8)))
+        (planes (make-array 8 :element-type '(unsigned-byte 16)
+                            :initial-element 0)))
     (loop for position from 0 below (length input) by 16
           do (setf counter (%gcm-inc32 counter))
-             (replace stream (aes-encrypt-block cipher counter))
+             (crypto-kit::%aes-encrypt-block-into cipher counter stream planes)
              (dotimes (index (min 16 (- (length input) position)))
                (setf (aref output (+ position index))
                      (logxor (aref input (+ position index))
