@@ -1,0 +1,8 @@
+(require :asdf)
+(asdf:load-system "cl-crypto-kit")
+(defun hex (v) (with-output-to-string (s) (loop for b across v do (format s "~2,'0X" b))))
+(let* ((args (remove "--" (uiop:command-line-arguments) :test #'string=)) (algorithm (intern (string-upcase (first args)) :keyword)) (file (second args)) (key (third args)))
+  (with-open-file (s file :element-type '(unsigned-byte 8))
+    (let ((data (make-array (file-length s) :element-type '(unsigned-byte 8))))
+      (read-sequence data s)
+      (format t "~A~%" (hex (if key (crypto-kit:hmac algorithm (let ((v (make-array (/ (length key) 2) :element-type '(unsigned-byte 8)))) (dotimes (i (length v) v) (setf (aref v i) (parse-integer key :start (* 2 i) :end (+ (* 2 i) 2) :radix 16)))) data) (crypto-kit:digest algorithm data)))))))

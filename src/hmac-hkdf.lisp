@@ -10,17 +10,23 @@
 
 (defun hmac (algorithm key data)
   (multiple-value-bind (word output block) (digest-params algorithm)
-    (declare (ignore word))
-    (let ((k (if (> (length key) block) (digest algorithm key) (copy-seq key))))
-      (when (< (length k) block)
-        (setf k (concatenate '(vector (unsigned-byte 8)) k
-                             (make-array (- block (length k)) :element-type '(unsigned-byte 8)
-                                         :initial-element 0))))
-      (let ((ipad (make-array block :element-type '(unsigned-byte 8)))
-            (opad (make-array block :element-type '(unsigned-byte 8))))
-        (loop for i below block do (setf (aref ipad i) (logxor #x36 (aref k i))
-                                         (aref opad i) (logxor #x5c (aref k i))))
-        (digest algorithm (concat-octets opad (digest algorithm (concat-octets ipad data))))))))
+    (declare (ignore word output))
+    ;; RFC 2104 hashes keys longer than the hash block size, then zero-pads
+    ;; every shorter key to exactly one block.
+    (let* ((key-block (if (> (length key) block)
+                          (digest algorithm key)
+                          (copy-seq key)))
+           (normalized-key (make-array block :element-type '(unsigned-byte 8)
+                                       :initial-element 0))
+           (ipad (make-array block :element-type '(unsigned-byte 8)))
+           (opad (make-array block :element-type '(unsigned-byte 8))))
+      (replace normalized-key key-block :end2 (min block (length key-block)))
+      (loop for i below block do
+        (setf (aref ipad i) (logxor #x36 (aref normalized-key i))
+              (aref opad i) (logxor #x5c (aref normalized-key i))))
+      (digest algorithm
+              (concat-octets opad
+                             (digest algorithm (concat-octets ipad data)))))))
 
 (defun hkdf-extract (algorithm salt ikm)
   (hmac algorithm (if (zerop (length salt))
@@ -29,7 +35,9 @@
 
 (defun hkdf-expand (algorithm prk info length)
   (let ((hash-length (digest-length algorithm)))
-    (when (or (< length 0) (> length (* 255 hash-length)))
+    (when (or (not (integerp length))
+              (minusp length)
+              (> length (* 255 hash-length)))
       (crypto-error "HKDF output length is out of range"))
     (let ((result (make-array length :element-type '(unsigned-byte 8))) (previous #()) (pos 0))
       (loop for counter from 1 while (< pos length) do
@@ -40,11 +48,16 @@
               (incf pos n))) result)))
 
 (defun random-octets (length)
-  (when (minusp length) (crypto-error "Random length must not be negative"))
+  (when (or (not (integerp length)) (minusp length))
+    (crypto-error "Random length must be a non-negative integer"))
   (let ((result (make-array length :element-type '(unsigned-byte 8))))
     (handler-case
         (with-open-file (stream "/dev/urandom" :direction :input :element-type '(unsigned-byte 8))
-          (let ((read (read-sequence result stream)))
-            (unless (= read length) (crypto-error "Could not read enough random bytes"))))
+          (loop with position = 0
+                while (< position length)
+                for read = (read-sequence result stream :start position)
+                do (if (> read position)
+                       (setf position read)
+                       (crypto-error "Could not read enough random bytes"))))
       (file-error (condition) (declare (ignore condition))
         (crypto-error "Secure random source is unavailable"))) result))
