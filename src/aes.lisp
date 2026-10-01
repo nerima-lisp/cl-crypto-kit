@@ -1,0 +1,101 @@
+(in-package #:crypto-kit)
+
+(defstruct (aes-context (:constructor %make-aes-context (round-keys rounds)))
+  round-keys rounds)
+
+(defun %aes-xtime (x)
+  (logand #xff
+          (logxor (ash x 1)
+                  (logand #x1b (- (ash x -7))))))
+
+(defun %aes-gf-mul (a b)
+  (let ((r 0))
+    (dotimes (i 8 r)
+      (setf r (logxor r (logand a (- (logand b 1)))))
+      (setf a (%aes-xtime a) b (ash b -1)))))
+
+(defun %aes-sbox (x)
+  (let ((y (if (zerop x) 0 (loop with p = 1 with q = 1
+                                  repeat 254 do
+                                    (setf p (%aes-gf-mul p x)
+                                          q (%aes-gf-mul q x))
+                                  finally (return q)))))
+    (flet ((rot (n) (logand #xff (logior (ash y n) (ash y (- n 8))))))
+      (logand #xff (logxor y (rot 1) (rot 2) (rot 3) (rot 4) #x63)))))
+
+(defun %aes-sub-word (word)
+  (logior (ash (%aes-sbox (ldb (byte 8 24) word)) 24)
+          (ash (%aes-sbox (ldb (byte 8 16) word)) 16)
+          (ash (%aes-sbox (ldb (byte 8 8) word)) 8)
+          (%aes-sbox word)))
+
+(defun %aes-key-expansion (key)
+  (let* ((nk (/ (length key) 4)) (nr (+ nk 6))
+         (words (make-array (* 4 (1+ nr)) :element-type '(unsigned-byte 32)))
+         (rcon 1))
+    (dotimes (i nk) (setf (aref words i)
+                          (logior (ash (aref key (* i 4)) 24)
+                                  (ash (aref key (+ (* i 4) 1)) 16)
+                                  (ash (aref key (+ (* i 4) 2)) 8)
+                                  (aref key (+ (* i 4) 3)))))
+    (loop for i from nk below (length words) do
+      (let ((temp (aref words (1- i))))
+        (when (zerop (mod i nk))
+          (setf temp (logior (ash (ldb (byte 8 16) temp) 24)
+                             (ash (ldb (byte 8 8) temp) 16)
+                             (ash (ldb (byte 8 0) temp) 8)
+                             (ldb (byte 8 24) temp)))
+          (setf temp (logxor (%aes-sub-word temp) (ash rcon 24)))
+          (setf rcon (%aes-xtime rcon)))
+        (when (and (= nk 8) (= (mod i nk) 4))
+          (setf temp (%aes-sub-word temp)))
+        (setf (aref words i) (logxor (aref words (- i nk)) temp))))
+    (values words nr)))
+
+(defun %aes-make (key size)
+  (unless (= (length key) size) (error "AES~D requires a ~D-byte key" (* 8 size) size))
+  (multiple-value-bind (round-keys rounds) (%aes-key-expansion key)
+    (%make-aes-context round-keys rounds)))
+
+(defun aes-128 (key) (%aes-make key 16))
+(defun aes-256 (key) (%aes-make key 32))
+
+(defun %aes-add-round-key (state keys round)
+  (dotimes (c 4)
+    (let ((word (aref keys (+ (* round 4) c))))
+      (dotimes (r 4)
+        (setf (aref state (+ (* c 4) r))
+              (logxor (aref state (+ (* c 4) r))
+                      (ldb (byte 8 (* 8 (- 3 r))) word)))))))
+
+(defun %aes-sub-bytes (state)
+  (dotimes (i 16) (setf (aref state i) (%aes-sbox (aref state i)))))
+
+(defun %aes-shift-rows (s)
+  (let ((old (copy-seq s)))
+    (dotimes (r 4)
+      (dotimes (c 4)
+        (setf (aref s (+ (* c 4) r))
+              (aref old (+ (* (mod (+ c r) 4) 4) r)))))))
+
+(defun %aes-mix-columns (s)
+  (dotimes (c 4)
+    (let* ((p (* c 4)) (a0 (aref s p)) (a1 (aref s (+ p 1)))
+           (a2 (aref s (+ p 2))) (a3 (aref s (+ p 3))))
+      (setf (aref s p) (logxor (%aes-gf-mul a0 2) (%aes-gf-mul a1 3) a2 a3)
+            (aref s (+ p 1)) (logxor a0 (%aes-gf-mul a1 2) (%aes-gf-mul a2 3) a3)
+            (aref s (+ p 2)) (logxor a0 a1 (%aes-gf-mul a2 2) (%aes-gf-mul a3 3))
+            (aref s (+ p 3)) (logxor (%aes-gf-mul a0 3) a1 a2 (%aes-gf-mul a3 2))))))
+
+(defun aes-encrypt-block (cipher block)
+  (let* ((ctx (if (typep cipher 'aes-context) cipher
+                  (if (= (length cipher) 16) (aes-128 cipher) (aes-256 cipher))))
+         (state (copy-seq block)) (keys (aes-context-round-keys ctx))
+         (rounds (aes-context-rounds ctx)))
+    (unless (= (length block) 16) (error "AES blocks are 16 bytes"))
+    (%aes-add-round-key state keys 0)
+    (loop for round from 1 below rounds do
+      (%aes-sub-bytes state) (%aes-shift-rows state) (%aes-mix-columns state)
+      (%aes-add-round-key state keys round))
+    (%aes-sub-bytes state) (%aes-shift-rows state) (%aes-add-round-key state keys rounds)
+    state))

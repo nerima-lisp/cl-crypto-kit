@@ -1,0 +1,10 @@
+(defpackage #:crypto-kit/test
+  (:use #:cl #:crypto-kit)
+  (:shadowing-import-from #:cl-weave #:describe)
+  (:import-from #:cl-weave #:expect #:it #:run-all #:signals)
+  (:export #:run-tests))
+(in-package #:crypto-kit/test)
+(defun hex (string)
+  (let ((out (make-array (/ (length string) 2) :element-type '(unsigned-byte 8))))
+    (loop for i below (length out) do (setf (aref out i) (parse-integer string :start (* i 2) :end (+ (* i 2) 2) :radix 16))) out))
+(defun ascii (string) (map '(vector (unsigned-byte 8)) #'char-code string))
