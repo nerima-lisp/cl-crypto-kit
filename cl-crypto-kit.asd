@@ -8,7 +8,8 @@
                (:file "hmac-hkdf") (:file "aes-sbox") (:file "aes") (:file "gcm")
                (:file "chacha20") (:file "poly1305") (:file "chacha20-poly1305")
                (:file "csprng") (:file "curve25519") (:file "ed25519")
-               (:file "rsa") (:file "rsa-pss"))
+               (:file "rsa") (:file "rsa-pss")
+               (:file "p256") (:file "p384") (:file "ecdsa"))
   :in-order-to ((test-op (test-op "cl-crypto-kit/test"))))
 
 (asdf:defsystem "cl-crypto-kit/test"
@@ -17,6 +18,6 @@
                (:file "tests-aes-gcm") (:file "wycheproof-aes-gcm")
                (:file "wycheproof-chacha") (:file "tests-chacha")
                (:file "tests-curve25519") (:file "wycheproof-curve25519")
-               (:file "tests-rsa"))
+               (:file "tests-rsa") (:file "tests-ec"))
   :perform (asdf:test-op (op c) (declare (ignore op c))
              (uiop:symbol-call "CRYPTO-KIT/TEST" "RUN-TESTS")))
