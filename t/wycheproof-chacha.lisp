@@ -1,3 +1,5 @@
+;;; Generated from C2SP/wycheproof commit
+;;; 3fa63dd0344abb611f1fb1d77e119938603ea230.
 (in-package #:crypto-kit/test)
 
 (defparameter +wycheproof-chacha-vectors+

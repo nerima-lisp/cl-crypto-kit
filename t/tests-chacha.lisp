@@ -11,12 +11,9 @@
 (defun ascii (string)
   (map '(vector (unsigned-byte 8)) #'char-code string))
 
-;;; RFC 8439 vectors for the ChaCha20-Poly1305 family.  This file deliberately
-;;; has no dependency on a JSON library or a downloaded fixture.  Wycheproof's
-;;; complete chacha20_poly1305_test.json is available at
-;;; testvectors_v1/chacha20_poly1305_test.json; the intended follow-up is to
-;;; vendor that data and use a small JSON reader when the project accepts a
-;;; fixture file.  Network access must not be needed to run this test suite.
+;;; RFC 8439 vectors for the ChaCha20-Poly1305 family.  Wycheproof vectors are
+;;; stored as Lisp constants in wycheproof-chacha.lisp so test execution has
+;;; no JSON or network dependency.
 
 (defun %chacha-hex (string)
   (let ((out (make-array (/ (length string) 2)
