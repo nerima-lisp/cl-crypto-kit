@@ -1,7 +1,6 @@
 (in-package #:crypto-kit)
 
-(export '(ed25519-public-key ed25519-sign ed25519-verify
-          ed25519-generate-keypair))
+(export 'ed25519-verify)
 
 ;;;; RFC 8032 Ed25519.  Points are represented in extended homogeneous
 ;;;; coordinates (X:Y:T:Z), with all coordinates reduced modulo p.
@@ -132,29 +131,6 @@
 (defun ed25519-hash-int (&rest octets)
   (ed25519-le-int (digest :sha512 (apply #'concat-octets octets))))
 
-(defun ed25519-secret-material (secret-key)
-  (unless (= (length secret-key) 32)
-    (error "Ed25519 secret keys must be 32-byte seeds"))
-  (let* ((h (digest :sha512 secret-key))
-         (a (ed25519-le-int h)))
-    (values (logior (logand a (- (ash 1 255) 8)) (ash 1 254))
-            (subseq h 32 64))))
-
-(defun ed25519-public-key (secret-key)
-  (multiple-value-bind (a ignored) (ed25519-secret-material secret-key)
-    (declare (ignore ignored))
-    (ed25519-encode (ed25519-scalarmult (ed25519-base) a))))
-
-(defun ed25519-sign (message secret-key)
-  (multiple-value-bind (a prefix) (ed25519-secret-material secret-key)
-    (let* ((public-key (ed25519-encode (ed25519-scalarmult (ed25519-base) a)))
-           (r (mod (ed25519-hash-int prefix message) +ed25519-l+))
-           (r-encoding (ed25519-encode (ed25519-scalarmult (ed25519-base) r)))
-           (k (mod (ed25519-hash-int r-encoding public-key message)
-                   +ed25519-l+))
-           (s (mod (+ r (* k a)) +ed25519-l+)))
-      (concat-octets r-encoding (ed25519-int-le s 32)))))
-
 (defun ed25519-verify (signature message public-key)
   (unless (and (= (length signature) 64) (= (length public-key) 32))
     (return-from ed25519-verify nil))
@@ -174,7 +150,3 @@
       ;; torsion and is the RFC 8032-compatible strict verification equation.
       (ed25519-point-equal (ed25519-scalarmult left 8)
                            (ed25519-scalarmult right 8)))))
-
-(defun ed25519-generate-keypair (&optional seed)
-  (let ((seed (or seed (random-octets 32))))
-    (values (ed25519-public-key seed) seed)))

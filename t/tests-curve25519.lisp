@@ -35,25 +35,30 @@
     (check-curve25519 all-zero-p "X25519 all-zero output was not reported")
     (check-curve25519
      (every #'zerop output) "X25519 all-zero input did not produce zero"))
-  (let* ((seed (curve25519-hex
-                "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"))
-         (message (make-array 0 :element-type '(unsigned-byte 8)))
-         (public-key (ed25519-public-key seed))
-         (signature (ed25519-sign message seed)))
+  (let ((message (make-array 0 :element-type '(unsigned-byte 8)))
+        (public-key (curve25519-hex
+                     "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"))
+        (signature (curve25519-hex
+                    "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")))
     (check-curve25519
-     (equalp public-key
-             (curve25519-hex
-              "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"))
-     "RFC 8032 public key vector failed")
-    (check-curve25519
-     (equalp signature
-             (curve25519-hex
-              "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"))
-     "RFC 8032 signature vector failed")
-    (check-curve25519 (ed25519-verify signature message public-key)
-                      "RFC 8032 signature did not verify")
+     (ed25519-verify signature message public-key)
+     "RFC 8032 signature vector did not verify")
     (setf (aref signature 0) (logxor (aref signature 0) 1))
     (check-curve25519 (not (ed25519-verify signature message public-key))
                       "Ed25519 modified signature was accepted"))
+  (let ((k (curve25519-hex
+            "0900000000000000000000000000000000000000000000000000000000000000"))
+        (u (curve25519-hex
+            "0900000000000000000000000000000000000000000000000000000000000000")))
+    (dotimes (iteration 1000)
+      (multiple-value-bind (next all-zero-p) (x25519 k u)
+        (declare (ignore all-zero-p))
+        (rotatef k u)
+        (setf k next)))
+    (check-curve25519
+     (equalp k
+             (curve25519-hex
+              "684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51"))
+     "RFC 7748 1000-iteration vector failed"))
   (format t "cl-crypto-kit: RFC 7748/8032 curve vectors passed~%")
   t)

@@ -7,5 +7,4 @@
            #:chacha20-keystream #:aead-seal #:aead-open
            #:aead-authentication-failure #:crypto-error
            #:crypto-error-message #:csprng-error
-           #:csprng-error-message #:x25519 #:ed25519-public-key
-           #:ed25519-sign #:ed25519-verify #:ed25519-generate-keypair))
+           #:csprng-error-message #:x25519 #:ed25519-verify))
