@@ -15,11 +15,20 @@
       (setf a (%aes-xtime a) b (ash b -1)))))
 
 (defun %aes-sbox (x)
-  (let ((y (if (zerop x) 0 (loop with p = 1 with q = 1
-                                  repeat 254 do
-                                    (setf p (%aes-gf-mul p x)
-                                          q (%aes-gf-mul q x))
-                                  finally (return q)))))
+  ;; The inverse is x^254.  This fixed addition chain also maps zero to zero,
+  ;; so S-box evaluation has no input-dependent branch or table lookup.
+  (let* ((x (logand x #xff))
+         (x2 (%aes-gf-mul x x))
+         (x4 (%aes-gf-mul x2 x2))
+         (x8 (%aes-gf-mul x4 x4))
+         (x16 (%aes-gf-mul x8 x8))
+         (x32 (%aes-gf-mul x16 x16))
+         (x64 (%aes-gf-mul x32 x32))
+         (x128 (%aes-gf-mul x64 x64))
+         (y (%aes-gf-mul
+             (%aes-gf-mul (%aes-gf-mul x2 x4) x8)
+             (%aes-gf-mul (%aes-gf-mul x16 x32)
+                          (%aes-gf-mul x64 x128)))))
     (flet ((rot (n) (logand #xff (logior (ash y n) (ash y (- n 8))))))
       (logand #xff (logxor y (rot 1) (rot 2) (rot 3) (rot 4) #x63)))))
 
@@ -27,7 +36,7 @@
   (logior (ash (%aes-sbox (ldb (byte 8 24) word)) 24)
           (ash (%aes-sbox (ldb (byte 8 16) word)) 16)
           (ash (%aes-sbox (ldb (byte 8 8) word)) 8)
-          (%aes-sbox word)))
+          (%aes-sbox (ldb (byte 8 0) word))))
 
 (defun %aes-key-expansion (key)
   (let* ((nk (/ (length key) 4)) (nr (+ nk 6))

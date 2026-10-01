@@ -9,22 +9,29 @@
 (defun %gcm-mul (x y)
   (let ((z 0) (v x))
     (dotimes (index 128 z)
-      (let ((mask (- (logand (ash y (- (- 127 index))) 1))))
+      (let ((mask (- (ldb (byte 1 (- 127 index)) y)))
+            (carry (- (logand v 1))))
         (setf z (logxor z (logand v mask))
               v (logxor (ash v -1)
                         (logand #xe1000000000000000000000000000000
-                                (- (logand v 1)))))))))
+                                carry)))))))
 
 (defun %gcm-int (octets)
-  (loop for octet across octets
-        for value = 0 then (logior (ash value 8) octet)
-        finally (return value)))
+  (let ((value 0))
+    (loop for octet across octets
+          do (setf value (logior (ash value 8) octet)))
+    value))
 
 (defun %gcm-bytes (value size)
   (let ((octets (make-array size :element-type '(unsigned-byte 8))))
     (dotimes (index size octets)
       (setf (aref octets (- size index 1))
             (logand #xff (ash value (* -8 index)))))))
+
+(defun %gcm-length-block (left-length right-length)
+  (%gcm-bytes (logior (ash (* 8 left-length) 64)
+                      (* 8 right-length))
+              16))
 
 (defun %gcm-ghash (hash-key aad ciphertext)
   (let ((y 0) (hash-key (%gcm-int hash-key)))
@@ -35,10 +42,10 @@
                  (replace block data :start2 position
                           :end2 (min (length data) (+ position 16)))
                  (setf y (%gcm-mul (logxor y (%gcm-int block)) hash-key)))))
-    (setf y (%gcm-mul
-             (logxor y (ash (* 8 (length aad)) 64)
-                     (* 8 (length ciphertext)))
-             hash-key))
+    (setf y (%gcm-mul (logxor y
+                              (%gcm-int (%gcm-length-block
+                                         (length aad) (length ciphertext))))
+                      hash-key))
     (%gcm-bytes y 16)))
 
 (defun %gcm-j0 (hash-key nonce)
@@ -55,14 +62,18 @@
                    (replace block nonce :start2 position
                             :end2 (min (length nonce) (+ position 16)))
                    (setf y (%gcm-mul (logxor y (%gcm-int block)) hash-key))))
-        (setf y (%gcm-mul (logxor y (* 8 (length nonce))) hash-key))
+        (setf y (%gcm-mul (logxor y
+                                  (%gcm-int (%gcm-length-block 0
+                                                                 (length nonce))))
+                          hash-key))
         (%gcm-bytes y 16))))
 
 (defun %gcm-inc32 (counter)
   (let ((result (copy-seq counter)))
     (loop for index downfrom 15 to 12
-          do (incf (aref result index))
-             (when (< (aref result index) 256) (return)))
+          do (let ((value (1+ (aref result index))))
+               (setf (aref result index) (logand #xff value))
+               (when (< value 256) (return))))
     result))
 
 (defun %gcm-ctr (cipher j0 input)
@@ -78,12 +89,17 @@
     output))
 
 (defun %gcm-constant-time-equal (left right)
-  (if (/= (length left) (length right)) nil
-      (let ((difference 0))
-        (dotimes (index (length left) (zerop difference))
-          (setf difference (logior difference
-                                   (logxor (aref left index)
-                                           (aref right index))))))))
+  (let ((difference (logxor (length left) (length right))))
+    (dotimes (index (max (length left) (length right))
+             (zerop difference))
+      (setf difference
+            (logior difference
+                   (if (< index (length left))
+                       (logxor (aref left index)
+                               (if (< index (length right))
+                                   (aref right index) 0))
+                       (if (< index (length right))
+                           (aref right index) 0)))))))
 
 (defun %gcm-authenticate (cipher nonce aad ciphertext)
   (let* ((zero (make-array 16 :element-type '(unsigned-byte 8)
