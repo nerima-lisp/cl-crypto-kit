@@ -11,6 +11,12 @@
 
 (defun ec-mod (x c) (mod x (ec-curve-prime c)))
 (defun ec-pow (x e c) (let ((r 1) (b (ec-mod x c))) (loop while (> e 0) do (when (oddp e) (setf r (ec-mod (* r b) c))) (setf b (ec-mod (* b b) c) e (ash e -1))) r))
+(defun ec-pow-mod (x e modulus)
+  (let ((r 1) (b (mod x modulus)))
+    (loop while (> e 0) do
+      (when (oddp e) (setf r (mod (* r b) modulus)))
+      (setf b (mod (* b b) modulus) e (ash e -1)))
+    r))
 (defun ec-inv (x c) (if (zerop x) 0 (ec-pow x (- (ec-curve-prime c) 2) c)))
 (defun ec-point (x y) (cons x y))
 (defun ec-infinity-p (q) (null q))
@@ -34,13 +40,27 @@
           (mod (+ (ec-pow (car q) 3 c)
                   (* (ec-curve-a c) (car q)) (ec-curve-b c)) (ec-curve-prime c)))))
 
+(defun ec-cswap (left right bit)
+  ;; The scalar bit selects with a mask. Bignum arithmetic remains
+  ;; implementation-dependent in timing; the ladder removes explicit
+  ;; secret-dependent control flow and table lookups from this operation.
+  (let* ((mask (- bit))
+         (lx (if left (car left) 0)) (ly (if left (cdr left) 0))
+         (rx (if right (car right) 0)) (ry (if right (cdr right) 0))
+         (lf (if left 1 0)) (rf (if right 1 0))
+         (dx (logand mask (logxor lx rx))) (dy (logand mask (logxor ly ry)))
+         (df (logand mask (logxor lf rf))))
+    (values (if (zerop (logxor lf df)) nil (cons (logxor lx dx) (logxor ly dy)))
+            (if (zerop (logxor rf df)) nil (cons (logxor rx dx) (logxor ry dy))))))
+
 (defun ec-mul (k q c &key fixed)
   (let ((r0 nil) (r1 q) (bits (or fixed (integer-length k))))
     (loop for i downfrom (1- bits) to 0 do
-      (let ((bit (if (logbitp i k) 1 0)))
-        (if (zerop bit)
-            (setf r1 (ec-add r0 r1 c) r0 (ec-add r0 r0 c))
-            (setf r0 (ec-add r0 r1 c) r1 (ec-add r1 r1 c))))) r0))
+      (let ((bit (ldb (byte 1 i) k)))
+        (multiple-value-setq (r0 r1) (ec-cswap r0 r1 bit))
+        (let ((sum (ec-add r0 r1 c)) (double (ec-add r0 r0 c)))
+          (setf r1 sum r0 double))
+        (multiple-value-setq (r0 r1) (ec-cswap r0 r1 bit)))) r0))
 
 (defun ec-octets-int (v) (read-be v 0 (length v)))
 (defun ec-int-octets (x n) (put-be x n))
