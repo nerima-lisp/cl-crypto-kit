@@ -58,4 +58,6 @@
  (run-wycheproof-aes-gcm-tests)
  (run-chacha-tests)
  (run-wycheproof-chacha-tests)
+ (run-rfc-curve25519-tests)
+ (run-wycheproof-curve25519-tests)
  (format t "cl-crypto-kit: RFC HMAC ~D, RFC HKDF ~D vectors passed~%" (length +rfc-hmac+) (length +rfc-hkdf+)) t)
