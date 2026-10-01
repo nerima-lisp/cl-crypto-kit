@@ -126,4 +126,39 @@
     (format t "cl-crypto-kit: ChaCha20/Poly1305 tests passed (~D checks)~%" checks)
     t))
 
+(defun run-wycheproof-chacha-tests ()
+  (let ((valid 0) (invalid 0))
+    (dolist (test +wycheproof-chacha-vectors+)
+      (destructuring-bind (tc-id result key nonce aad message ciphertext tag) test
+        (declare (ignore tc-id))
+        (let ((key (%chacha-hex key))
+              (nonce (%chacha-hex nonce))
+              (aad (%chacha-hex aad))
+              (message (%chacha-hex message)))
+          (ecase result
+            (:valid
+             (incf valid)
+             (let* ((expected (concatenate '(vector (unsigned-byte 8))
+                                           (%chacha-hex ciphertext) (%chacha-hex tag)))
+                    (sealed (aead-seal :chacha20-poly1305 key nonce message aad)))
+               (%chacha-check (equalp sealed expected) "Wycheproof seal")
+               (%chacha-check (equalp (aead-open :chacha20-poly1305 key nonce sealed aad)
+                                      message)
+                              "Wycheproof open")))
+            (:invalid
+             (incf invalid)
+             (handler-case
+                 (progn
+                   (aead-open :chacha20-poly1305 key nonce
+                              (concatenate '(vector (unsigned-byte 8))
+                                           (%chacha-hex ciphertext) (%chacha-hex tag))
+                              aad)
+                   (error "Wycheproof accepted invalid case"))
+               (error () nil)))))))
+    (unless (= (+ valid invalid) 325)
+      (error "Unexpected Wycheproof case count"))
+    (format t "cl-crypto-kit: Wycheproof ChaCha20-Poly1305 passed (~D valid, ~D invalid)~%"
+            valid invalid)
+    t))
+
 (export 'run-chacha-tests)

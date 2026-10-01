@@ -50,4 +50,5 @@
  (dolist (v +rfc-hkdf+) (destructuring-bind (a i s info n p o) v (checkv (hkdf-extract a (bytes s) (bytes i)) p "RFC HKDF extract") (checkv (hkdf-expand a (bytes p) (bytes info) n) o "RFC HKDF expand")))
  (run-nist-shavs-tests)
  (run-chacha-tests)
+ (run-wycheproof-chacha-tests)
  (format t "cl-crypto-kit: RFC HMAC ~D, RFC HKDF ~D vectors passed~%" (length +rfc-hmac+) (length +rfc-hkdf+)) t)
