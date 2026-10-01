@@ -46,18 +46,3 @@
                                                                         :initial-element counter))))
         (let ((n (min hash-length (- length pos)))) (replace result previous :start1 pos :end1 (+ pos n))
               (incf pos n))) result)))
-
-(defun random-octets (length)
-  (when (or (not (integerp length)) (minusp length))
-    (crypto-error "Random length must be a non-negative integer"))
-  (let ((result (make-array length :element-type '(unsigned-byte 8))))
-    (handler-case
-        (with-open-file (stream "/dev/urandom" :direction :input :element-type '(unsigned-byte 8))
-          (loop with position = 0
-                while (< position length)
-                for read = (read-sequence result stream :start position)
-                do (if (> read position)
-                       (setf position read)
-                       (crypto-error "Could not read enough random bytes"))))
-      (file-error (condition) (declare (ignore condition))
-        (crypto-error "Secure random source is unavailable"))) result))
