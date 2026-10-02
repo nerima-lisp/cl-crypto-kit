@@ -133,6 +133,13 @@
     (values passed total)))
 
 (defun run-ec-tests ()
+  (dotimes (attempt 8)
+    (multiple-value-bind (private public) (p256-generate-keypair)
+      (declare (ignore public))
+      (let ((scalar (crypto-kit::ec-octets-int private)))
+        (unless (and (> scalar 0)
+                     (< scalar (crypto-kit::ec-curve-n crypto-kit::+p256+)))
+          (error "Generated P-256 private scalar is outside [1,n-1]")))))
   (let* ((c crypto-kit::+p256+)
          (g (crypto-kit::ec-point (crypto-kit::ec-curve-gx c)
                                   (crypto-kit::ec-curve-gy c)))
