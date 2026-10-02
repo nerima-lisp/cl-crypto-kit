@@ -1,7 +1,7 @@
 (in-package #:asdf-user)
 
 (asdf:defsystem "cl-crypto-kit"
-  :description "Hash, HMAC, and HKDF primitives."
+  :description "Pure Common Lisp cryptographic primitives."
   :author "nerima-lisp" :license "MIT" :version "0.1.0"
   :depends-on () :pathname "src" :serial t
   :components ((:file "package") (:file "conditions") (:file "hash")

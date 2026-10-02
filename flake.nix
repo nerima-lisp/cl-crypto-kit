@@ -1,5 +1,5 @@
 {
-  description = "Hash, HMAC, and HKDF primitives for Common Lisp.";
+  description = "Pure Common Lisp cryptographic primitives.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -30,7 +30,7 @@
             runHook postInstall
           '';
           meta = {
-            description = "Hash, HMAC, and HKDF primitives for Common Lisp";
+            description = "Pure Common Lisp cryptographic primitives";
             license = pkgs.lib.licenses.mit;
           };
         };

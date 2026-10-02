@@ -4,7 +4,7 @@
 ;;; particular, the scalar is never assembled as a Lisp integer.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (export 'x25519))
+  (export '(x25519 x25519-base)))
 
 (defconstant +curve25519-limbs+ 16)
 (defconstant +curve25519-radix+ 65536)
@@ -177,3 +177,11 @@ is true for the contributory-infinity result and lets callers reject it."
       (let ((output (%curve25519-encode
                      (%curve25519-mul x2 (%curve25519-invert z2)))))
         (values output (%curve25519-all-zero-p output))))))
+
+(defun x25519-base (scalar)
+  "Compute X25519 with the standard base point."
+  (x25519 scalar
+          (let ((base (make-array 32 :element-type '(unsigned-byte 8)
+                                  :initial-element 0)))
+            (setf (aref base 0) 9)
+            base)))
