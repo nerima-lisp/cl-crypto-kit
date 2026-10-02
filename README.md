@@ -3,21 +3,40 @@
 Pure Common Lisp cryptographic primitives for SBCL on macOS and Linux. Public
 octet data uses `(simple-array (unsigned-byte 8) (*))`.
 
-Supported digests are `:sha1`, `:sha256`, `:sha384`, and `:sha512`. Each has a
+## Getting started
+
+Load `cl-crypto-kit.asd` with ASDF, then use the `crypto-kit` package:
+
+```lisp
+(asdf:load-system "cl-crypto-kit")
+(crypto-kit:digest :sha256 (make-array 0 :element-type '(unsigned-byte 8)))
+```
+
+The Nix development shell provides SBCL and the test dependencies. Run the
+full vector suite with:
+
+```sh
+nix run .#test
+```
+
+Supported digests are `:md5`, `:sha1`, `:sha256`, `:sha384`, and `:sha512`. Each has a
 one-shot `digest` operation and the incremental `make-digest`,
 `digest-update`, `digest-copy`, and `digest-final` operations.
 
 ## API
 
 - Digests: `digest`, `make-digest`, `digest-update`, `digest-copy`,
-  `digest-final`, and `digest-length` for `:sha1`, `:sha256`, `:sha384`, and
-  `:sha512`.
+  `digest-final`, and `digest-length` for `:md5`, `:sha1`, `:sha256`, `:sha384`,
+  and `:sha512`. MD5 is provided for compatibility and should not be used for
+  new security-sensitive designs.
 - Authentication and derivation: `hmac`, `hkdf-extract`, `hkdf-expand`, and
   `constant-time-equal`.
-- AEAD: `aead-seal` and `aead-open` for `:aes-128-gcm`, `:aes-256-gcm`, and
+- AEAD: `aead-seal` and `aead-open` for `:aes-128-gcm`, `:aes-192-gcm`,
+  `:aes-256-gcm`, and
   `:chacha20-poly1305`. Authentication failure signals
   `aead-authentication-failure`.
-- QUIC primitives: `aes-encrypt-block` and `chacha20-keystream`.
+- QUIC primitives: `aes-encrypt-block`, `chacha20-block`, and
+  `chacha20-keystream`.
 - Key exchange: `x25519`, `x25519-base`, `p256-generate-keypair`, and
   `p256-ecdh`.
 - Signature verification: `verify-signature` for ECDSA P-256/P-384, RSA
@@ -41,8 +60,10 @@ publish a stable benchmark number. Measure a target deployment with the
 provided implementation and workload.
 
 ```sh
-nix flake check --all-systems
+nix flake check --all-systems --no-write-lock-file
 ```
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 

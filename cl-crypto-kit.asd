@@ -3,6 +3,8 @@
 (asdf:defsystem "cl-crypto-kit"
   :description "Pure Common Lisp cryptographic primitives."
   :author "nerima-lisp" :license "MIT" :version "0.1.0"
+  :homepage "https://github.com/nerima-lisp/cl-crypto-kit"
+  :source-control "https://github.com/nerima-lisp/cl-crypto-kit.git"
   :depends-on () :pathname "src" :serial t
   :components ((:file "package") (:file "conditions") (:file "hash")
                (:file "hmac-hkdf") (:file "aes-sbox") (:file "aes") (:file "gcm")
@@ -13,8 +15,9 @@
   :in-order-to ((test-op (test-op "cl-crypto-kit/test"))))
 
 (asdf:defsystem "cl-crypto-kit/test"
-  :depends-on ("cl-crypto-kit") :pathname "t" :serial t
-  :components ((:file "tests") (:file "nist-shavs")
+  :depends-on ("cl-crypto-kit" "cl-weave") :pathname "t" :serial t
+  :components ((:file "package") (:file "runner") (:file "tests")
+               (:file "tests-hash") (:file "nist-shavs")
                (:file "tests-aes-gcm") (:file "wycheproof-aes-gcm")
                (:file "wycheproof-chacha") (:file "tests-chacha")
                (:file "tests-curve25519") (:file "wycheproof-curve25519")

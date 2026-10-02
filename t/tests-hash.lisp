@@ -1,6 +1,13 @@
 (in-package #:crypto-kit/test)
 
 (describe "standard digests"
+  (it "matches the RFC 1321 MD5 test vectors"
+    (dolist (vector '(("" "d41d8cd98f00b204e9800998ecf8427e")
+                      ("a" "0cc175b9c0f1b6a831c399e269772661")
+                      ("abc" "900150983cd24fb0d6963f7d28e17f72")
+                      ("message digest" "f96b697d7cb7938d525a2f31aaf161d0")
+                      ("abcdefghijklmnopqrstuvwxyz" "c3fcd3d76192e4007dfb496cca67e13b")))
+      (expect (digest :md5 (ascii (first vector))) :to-equalp (hex (second vector)))))
   (it "matches the empty-message vectors"
     (expect (digest :sha1 #()) :to-equalp (hex "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
     (expect (digest :sha256 #()) :to-equalp (hex "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))

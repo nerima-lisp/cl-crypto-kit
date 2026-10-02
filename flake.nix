@@ -12,6 +12,10 @@
   outputs = { self, nixpkgs, cl-weave, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-linux" ];
+      asd = builtins.readFile ./cl-crypto-kit.asd;
+      version = builtins.elemAt
+        (builtins.split "\""
+          (builtins.elemAt (builtins.split ":version \"" asd) 2)) 0;
       forEachSystem = function:
         nixpkgs.lib.genAttrs systems (system: function system (import nixpkgs { inherit system; }));
     in {
@@ -19,14 +23,14 @@
       packages = forEachSystem (system: pkgs: {
         default = pkgs.stdenvNoCC.mkDerivation {
           pname = "cl-crypto-kit";
-          version = "0.1.0";
+          inherit version;
           src = self;
           dontBuild = true;
           installPhase = ''
             runHook preInstall
             target="$out/share/common-lisp/source/cl-crypto-kit"
             mkdir -p "$target"
-            cp -r cl-crypto-kit.asd src t "$target"/
+            cp -r CHANGELOG.md LICENSE README.md cl-crypto-kit.asd src t "$target"/
             runHook postInstall
           '';
           meta = {
