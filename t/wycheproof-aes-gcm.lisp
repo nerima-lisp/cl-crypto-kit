@@ -334,7 +334,7 @@
                (error "Wycheproof decryption tcId ~D failed" tc-id))))
           (:invalid
            (handler-case
-             (progn
+               (progn
                  (aead-open algorithm key nonce expected aad)
                  (error "Wycheproof invalid tcId ~D was accepted" tc-id))
              (aead-authentication-failure () nil)
