@@ -35,6 +35,7 @@ one-shot `digest` operation and the incremental `make-digest`,
   `:aes-256-gcm`, and
   `:chacha20-poly1305`. Authentication failure signals
   `aead-authentication-failure`.
+  Callers must not reuse a nonce with the same key.
 - QUIC primitives: `aes-encrypt-block`, `chacha20-block`, and
   `chacha20-keystream`.
 - Key exchange: `x25519`, `x25519-base`, `p256-generate-keypair`, and
