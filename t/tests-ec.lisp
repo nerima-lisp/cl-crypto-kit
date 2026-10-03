@@ -166,6 +166,12 @@
     (unless (crypto-kit::ec-on-curve-p g c) (error "P-256 generator is off curve"))
     (unless (= (crypto-kit::ec-octets-int (p256-ecdh 1 encoded))
                (crypto-kit::ec-curve-gx c)) (error "P-256 ECDH scalar one"))
+    (dolist (private (list (make-array 31 :element-type '(unsigned-byte 8))
+                           (make-array 33 :element-type '(unsigned-byte 8))))
+      (handler-case
+          (progn (p256-ecdh private encoded)
+                 (error "P-256 private key with invalid length was accepted"))
+        (crypto-error () t)))
     (let ((bad (copy-seq encoded)))
       (setf (aref bad (1- (length bad))) (logxor (aref bad (1- (length bad))) 1))
       (handler-case (progn (p256-ecdh 1 bad) (error "off-curve point accepted"))

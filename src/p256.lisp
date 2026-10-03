@@ -161,7 +161,12 @@
 
 (defun p256-ecdh (private-key public-key)
   (let* ((q (ec-decode-point public-key +p256+))
-         (k (if (arrayp private-key) (ec-octets-int private-key) private-key)))
+         (k (if (arrayp private-key)
+                (progn
+                  (unless (= (length private-key) 32)
+                    (crypto-error "Invalid P-256 private key length"))
+                  (ec-octets-int private-key))
+                private-key)))
     (unless (and (integerp k) (> k 0) (< k (ec-curve-n +p256+)))
       (crypto-error "Invalid P-256 private scalar"))
     ;; Adding 3n preserves kP and keeps the 258-bit ladder width fixed.

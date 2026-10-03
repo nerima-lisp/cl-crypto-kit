@@ -143,4 +143,31 @@
                                (%aes-gcm-bytes ""))
         (error "short AES-GCM ciphertext-and-tag was accepted"))
     (crypto-kit::aead-authentication-failure () nil))
+  (let ((max-iv-bytes (floor crypto-kit::+gcm-max-iv-bits+ 8))
+        (max-data-bytes crypto-kit::+gcm-max-data-bytes+)
+        (max-aad-bytes crypto-kit::+gcm-max-aad-bytes+))
+    (flet ((expect-crypto-error (thunk label)
+             (handler-case
+                 (progn (funcall thunk)
+                        (error "Accepted invalid AES-GCM length: ~A" label))
+               (crypto-kit::crypto-error () nil))))
+      (crypto-kit::%gcm-check-input-lengths 1 max-data-bytes max-aad-bytes)
+      (crypto-kit::%gcm-check-input-lengths max-iv-bytes 0 0)
+      (crypto-kit::%gcm-check-input-lengths 1 0 0 max-data-bytes)
+      (expect-crypto-error
+       (lambda () (crypto-kit::%gcm-check-input-lengths 0 0 0))
+       "zero IV")
+      (expect-crypto-error
+       (lambda () (crypto-kit::%gcm-check-input-lengths (1+ max-iv-bytes) 0 0))
+       "IV upper boundary")
+      (expect-crypto-error
+       (lambda () (crypto-kit::%gcm-check-input-lengths 1 (1+ max-data-bytes) 0))
+       "plaintext upper boundary")
+      (expect-crypto-error
+       (lambda () (crypto-kit::%gcm-check-input-lengths 1 0 (1+ max-aad-bytes)))
+       "AAD upper boundary")
+      (expect-crypto-error
+       (lambda ()
+         (crypto-kit::%gcm-check-input-lengths 1 0 0 (1+ max-data-bytes)))
+       "ciphertext upper boundary")))
   t)

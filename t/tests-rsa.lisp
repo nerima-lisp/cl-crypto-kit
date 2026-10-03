@@ -88,6 +88,7 @@
   (let* ((path (merge-pathnames (format nil "t/fixtures/wycheproof-rsa/~A" file)
                                 (asdf:system-source-directory "cl-crypto-kit")))
          (document (with-open-file (stream path) (%json-value stream)))
+         (declared (%json-get document "numberOfTests"))
          (passed 0) (total 0))
     (dolist (group (%json-get document "testGroups"))
       (let* ((key (%json-get group "publicKey"))
@@ -107,6 +108,8 @@
                     (eq actual (string= result "valid")))
                 (incf passed)
                 (error "RSA Wycheproof mismatch ~A tcId ~D" file (%json-get test "tcId")))))))
+    (unless (= declared total)
+      (error "RSA Wycheproof count mismatch: declared ~D, read ~D" declared total))
     (format t "RSA Wycheproof ~A: ~D/~D passed~%" file passed total)
     (values passed total)))
 
