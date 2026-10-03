@@ -6,7 +6,11 @@
                       ("a" "0cc175b9c0f1b6a831c399e269772661")
                       ("abc" "900150983cd24fb0d6963f7d28e17f72")
                       ("message digest" "f96b697d7cb7938d525a2f31aaf161d0")
-                      ("abcdefghijklmnopqrstuvwxyz" "c3fcd3d76192e4007dfb496cca67e13b")))
+                      ("abcdefghijklmnopqrstuvwxyz" "c3fcd3d76192e4007dfb496cca67e13b")
+                      ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+                       "d174ab98d277d9f5a5611c2c9f419d9f")
+                      ("12345678901234567890123456789012345678901234567890123456789012345678901234567890"
+                       "57edf4a22be3c955ac49da2e2107b67a")))
       (expect (digest :md5 (ascii (first vector))) :to-equalp (hex (second vector)))))
   (it "matches the empty-message vectors"
     (expect (digest :sha1 #()) :to-equalp (hex "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
@@ -20,7 +24,14 @@
         (digest-update state (ascii "c"))
         (digest-update copy (ascii "d"))
         (expect (digest-final state) :to-equalp (digest :sha256 (ascii "abc")))
-        (expect (digest-final copy) :to-equalp (digest :sha256 (ascii "abd")))))))
+        (expect (digest-final copy) :to-equalp (digest :sha256 (ascii "abd"))))))
+  (it "supports incremental MD5 updates across a block boundary"
+    (let ((state (make-digest :md5))
+          (message "12345678901234567890123456789012345678901234567890123456789012345678901234567890"))
+      (loop for start from 0 below (length message) by 7
+            do (digest-update state (ascii message) :start start
+                             :end (min (length message) (+ start 7))))
+      (expect (digest-final state) :to-equalp (hex "57edf4a22be3c955ac49da2e2107b67a")))))
 
 (describe "HMAC and HKDF"
   (it "matches RFC 4231 HMAC-SHA-256 case 1"
