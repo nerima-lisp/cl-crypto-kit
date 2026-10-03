@@ -325,17 +325,18 @@
     (destructuring-bind (algorithm key nonce aad plaintext ciphertext tag result tc-id) vector
       (let* ((key (%aes-gcm-bytes key)) (nonce (%aes-gcm-bytes nonce))
              (aad (%aes-gcm-bytes aad)) (plaintext (%aes-gcm-bytes plaintext))
-             (expected (%aes-gcm-bytes (concatenate 'string ciphertext tag)))
-             (sealed (handler-case (aead-seal algorithm key nonce plaintext aad)
-                       (error () nil))))
+             (expected (%aes-gcm-bytes (concatenate 'string ciphertext tag))))
         (ecase result
           (:valid
-           (unless (equalp sealed expected) (error "Wycheproof encryption tcId ~D failed" tc-id))
-           (unless (equalp (aead-open algorithm key nonce expected aad) plaintext)
-             (error "Wycheproof decryption tcId ~D failed" tc-id)))
+           (let ((sealed (aead-seal algorithm key nonce plaintext aad)))
+             (unless (equalp sealed expected) (error "Wycheproof encryption tcId ~D failed" tc-id))
+             (unless (equalp (aead-open algorithm key nonce expected aad) plaintext)
+               (error "Wycheproof decryption tcId ~D failed" tc-id))))
           (:invalid
-           (when (and sealed (handler-case (aead-open algorithm key nonce expected aad)
-                                (aead-authentication-failure () nil)))
-             (error "Wycheproof invalid tcId ~D was accepted" tc-id)))))))
+           (handler-case
+               (progn
+                 (aead-open algorithm key nonce expected aad)
+                 (error "Wycheproof invalid tcId ~D was accepted" tc-id))
+             (aead-authentication-failure () nil)))))))
   (format t "cl-crypto-kit: Wycheproof AES-GCM ~D vectors passed~%" (length +wycheproof-aes-gcm+))
   t)

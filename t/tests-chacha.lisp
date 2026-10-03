@@ -160,14 +160,15 @@
                               "Wycheproof open")))
             (:invalid
              (incf invalid)
-             (handler-case
-                 (progn
-                   (aead-open :chacha20-poly1305 key nonce
-                              (concatenate '(vector (unsigned-byte 8))
-                                           (%chacha-hex ciphertext) (%chacha-hex tag))
-                              aad)
-                   (error "Wycheproof accepted invalid case"))
-               (error () nil)))))))
+             (unless (or (/= (length key) 32) (/= (length nonce) 12))
+               (handler-case
+                   (progn
+                     (aead-open :chacha20-poly1305 key nonce
+                                (concatenate '(vector (unsigned-byte 8))
+                                             (%chacha-hex ciphertext) (%chacha-hex tag))
+                                aad)
+                     (error "Wycheproof accepted invalid case"))
+                 (aead-authentication-failure () nil))))))))
     (unless (= (+ valid invalid) 325)
       (error "Unexpected Wycheproof case count"))
     (format t "cl-crypto-kit: Wycheproof ChaCha20-Poly1305 passed (~D valid, ~D invalid)~%"

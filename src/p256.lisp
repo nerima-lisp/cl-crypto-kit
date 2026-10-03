@@ -171,4 +171,3 @@
                    +p256+)))
       (unless shared (crypto-error "Invalid EC shared point"))
       (ec-int-octets (car shared) 32))))
-
