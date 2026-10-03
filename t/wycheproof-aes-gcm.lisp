@@ -334,9 +334,10 @@
                (error "Wycheproof decryption tcId ~D failed" tc-id))))
           (:invalid
            (handler-case
-               (progn
+             (progn
                  (aead-open algorithm key nonce expected aad)
                  (error "Wycheproof invalid tcId ~D was accepted" tc-id))
-             (aead-authentication-failure () nil)))))))
+             (aead-authentication-failure () nil)
+             (crypto-error () nil)))))))
   (format t "cl-crypto-kit: Wycheproof AES-GCM ~D vectors passed~%" (length +wycheproof-aes-gcm+))
   t)
