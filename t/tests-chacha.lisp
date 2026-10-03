@@ -140,10 +140,9 @@
     t))
 
 (defun run-wycheproof-chacha-tests ()
-  (let ((valid 0) (invalid 0))
+  (let ((valid 0) (invalid 0) (malformed 0))
     (dolist (test +wycheproof-chacha-vectors+)
       (destructuring-bind (tc-id result key nonce aad message ciphertext tag) test
-        (declare (ignore tc-id))
         (let ((key (%chacha-hex key))
               (nonce (%chacha-hex nonce))
               (aad (%chacha-hex aad))
@@ -160,19 +159,43 @@
                               "Wycheproof open")))
             (:invalid
              (incf invalid)
-             (unless (or (/= (length key) 32) (/= (length nonce) 12))
-               (handler-case
+             (let ((sealed (concatenate '(vector (unsigned-byte 8))
+                                        (%chacha-hex ciphertext) (%chacha-hex tag)))
+                   (malformed-p (or (/= (length key) 32)
+                                    (/= (length nonce) 12))))
+               (if malformed-p
                    (progn
-                     (aead-open :chacha20-poly1305 key nonce
-                                (concatenate '(vector (unsigned-byte 8))
-                                             (%chacha-hex ciphertext) (%chacha-hex tag))
-                                aad)
-                     (error "Wycheproof accepted invalid case"))
-                 (aead-authentication-failure () nil))))))))
-    (unless (= (+ valid invalid) 325)
-      (error "Unexpected Wycheproof case count"))
-    (format t "cl-crypto-kit: Wycheproof ChaCha20-Poly1305 passed (~D valid, ~D invalid)~%"
-            valid invalid)
+                     (incf malformed)
+                     (let ((caught nil))
+                       (handler-case
+                           (progn
+                             (aead-open :chacha20-poly1305 key nonce sealed aad)
+                             (error "Wycheproof accepted malformed invalid case ~D"
+                                    tc-id))
+                         (crypto-error () (setf caught t)))
+                       (%chacha-check caught
+                                      (format nil
+                                              "Wycheproof malformed case ~D did not signal crypto-error"
+                                              tc-id))))
+                   (let ((caught nil))
+                     (handler-case
+                         (progn
+                           (aead-open :chacha20-poly1305 key nonce sealed aad)
+                           (error "Wycheproof accepted invalid case ~D" tc-id))
+                       (aead-authentication-failure () (setf caught t)))
+                     (%chacha-check caught
+                                    (format nil
+                                            "Wycheproof invalid case ~D did not signal authentication failure"
+                                            tc-id))))))))))
+    (%chacha-check (= valid 256) "Unexpected Wycheproof valid case count")
+    (%chacha-check (= invalid 69) "Unexpected Wycheproof invalid case count")
+    (%chacha-check (= (+ valid invalid) 325)
+                   "Unexpected Wycheproof total case count")
+    (%chacha-check (= malformed 9)
+                   "Unexpected Wycheproof malformed case count")
+    (format t
+            "cl-crypto-kit: Wycheproof ChaCha20-Poly1305 passed (~D total: ~D valid, ~D invalid, ~D malformed)~%"
+            (+ valid invalid) valid invalid malformed)
     t))
 
 (export 'run-chacha-tests)
