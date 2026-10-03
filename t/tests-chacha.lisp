@@ -136,6 +136,57 @@
                                   aad)
                        plaintext)
                "ChaCha20-Poly1305 long input round-trip")))
+
+      ;; Every public ChaCha entry point must reject malformed key and nonce
+      ;; lengths before reaching the fixed-width core.
+      (let* ((key (make-array 32 :element-type '(unsigned-byte 8)))
+             (nonce (make-array 12 :element-type '(unsigned-byte 8))))
+        (flet ((check-crypto-error (thunk label)
+                 (incf checks)
+                 (handler-case
+                     (progn (funcall thunk)
+                            (error "Accepted malformed ChaCha input: ~A" label))
+                   (crypto-error () t))))
+          (check-crypto-error
+           (lambda ()
+             (chacha20-block (make-array 31 :element-type '(unsigned-byte 8))
+                             1 nonce))
+           "chacha20-block key")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key 1
+                                (make-array 11 :element-type '(unsigned-byte 8))
+                                1))
+           "chacha20-keystream nonce")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key 1 nonce
+                                (1+ (* (1- (ash 1 32)) 64))))
+           "chacha20-keystream length")
+          (check-crypto-error
+           (lambda ()
+             (aead-seal :chacha20-poly1305
+                        (make-array 31 :element-type '(unsigned-byte 8))
+                        nonce #() #()))
+           "aead-seal key")
+          (check-crypto-error
+           (lambda ()
+             (aead-seal :chacha20-poly1305 key
+                        (make-array 11 :element-type '(unsigned-byte 8))
+                        #() #()))
+           "aead-seal nonce")
+          (check-crypto-error
+           (lambda ()
+             (aead-open :chacha20-poly1305
+                        (make-array 31 :element-type '(unsigned-byte 8))
+                        nonce (make-array 16 :element-type '(unsigned-byte 8)) #()))
+           "aead-open key")
+          (check-crypto-error
+           (lambda ()
+             (aead-open :chacha20-poly1305 key
+                        (make-array 11 :element-type '(unsigned-byte 8))
+                        (make-array 16 :element-type '(unsigned-byte 8)) #()))
+           "aead-open nonce")))
     (format t "cl-crypto-kit: ChaCha20/Poly1305 tests passed (~D checks)~%" checks)
     t))
 
