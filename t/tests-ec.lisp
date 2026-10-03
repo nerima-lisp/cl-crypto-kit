@@ -91,8 +91,14 @@
             (incf total)
             (multiple-value-bind (pub encoding)
                 (%ec-public-point (%ec-json-get test "public"))
-              (let* ((valid (and pub (handler-case
-                                         (equalp (p256-ecdh (%ec-hex (%ec-json-get test "private")) pub)
+              ;; Wycheproof valid scalars use variable-width octet encodings.
+              (let* ((raw-private (%ec-hex (%ec-json-get test "private")))
+                     (private (if (string= (%ec-json-get test "result") "valid")
+                                  (crypto-kit::ec-int-octets
+                                   (crypto-kit::ec-octets-int raw-private) 32)
+                                  raw-private))
+                     (valid (and pub (handler-case
+                                         (equalp (p256-ecdh private pub)
                                                  (%ec-hex (%ec-json-get test "shared")))
                                        (crypto-error () nil))))
                      (result (%ec-json-get test "result"))
