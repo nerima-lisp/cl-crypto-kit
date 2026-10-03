@@ -153,7 +153,7 @@
                  (progn (funcall thunk)
                         (error "Accepted invalid AES-GCM length: ~A" label))
                (crypto-kit::crypto-error () nil))))
-      ;; SBCL's maximum array dimension is below the GCM IV and AAD limits.
+      ;; SBCL's maximum array dimension prevents public construction of 2^61-byte IV/AAD inputs.
       ;; Keep those unrepresentable upper-bound checks on the shared checker.
       (crypto-kit::%gcm-check-input-lengths 1 max-data-bytes max-aad-bytes)
       (crypto-kit::%gcm-check-input-lengths max-iv-bytes 0 0)
