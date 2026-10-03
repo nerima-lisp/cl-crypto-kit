@@ -60,6 +60,7 @@ publish a stable benchmark number. Measure a target deployment with the
 provided implementation and workload.
 
 ```sh
+nix fmt -- --ci
 nix flake check --all-systems --no-write-lock-file
 ```
 
