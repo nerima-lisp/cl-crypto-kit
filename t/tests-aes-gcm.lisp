@@ -146,28 +146,54 @@
   (let ((max-iv-bytes (floor crypto-kit::+gcm-max-iv-bits+ 8))
         (max-data-bytes crypto-kit::+gcm-max-data-bytes+)
         (max-aad-bytes crypto-kit::+gcm-max-aad-bytes+))
-    (flet ((expect-crypto-error (thunk label)
+    (flet ((length-only-octets (length)
+             (make-array length :element-type nil))
+           (expect-crypto-error (thunk label)
              (handler-case
                  (progn (funcall thunk)
                         (error "Accepted invalid AES-GCM length: ~A" label))
                (crypto-kit::crypto-error () nil))))
+      ;; SBCL's maximum array dimension is below the GCM IV and AAD limits.
+      ;; Keep those unrepresentable upper-bound checks on the shared checker.
       (crypto-kit::%gcm-check-input-lengths 1 max-data-bytes max-aad-bytes)
       (crypto-kit::%gcm-check-input-lengths max-iv-bytes 0 0)
       (crypto-kit::%gcm-check-input-lengths 1 0 0 max-data-bytes)
       (expect-crypto-error
-       (lambda () (crypto-kit::%gcm-check-input-lengths 0 0 0))
-       "zero IV")
-      (expect-crypto-error
-       (lambda () (crypto-kit::%gcm-check-input-lengths (1+ max-iv-bytes) 0 0))
+       (lambda ()
+         (crypto-kit::%gcm-check-input-lengths (1+ max-iv-bytes) 0 0))
        "IV upper boundary")
       (expect-crypto-error
-       (lambda () (crypto-kit::%gcm-check-input-lengths 1 (1+ max-data-bytes) 0))
-       "plaintext upper boundary")
-      (expect-crypto-error
-       (lambda () (crypto-kit::%gcm-check-input-lengths 1 0 (1+ max-aad-bytes)))
+       (lambda ()
+         (crypto-kit::%gcm-check-input-lengths 1 0 (1+ max-aad-bytes)))
        "AAD upper boundary")
       (expect-crypto-error
        (lambda ()
-         (crypto-kit::%gcm-check-input-lengths 1 0 0 (1+ max-data-bytes)))
-       "ciphertext upper boundary")))
+         (aead-seal :aes-128-gcm
+                    (%aes-gcm-bytes "00000000000000000000000000000000")
+                    #() #() #()))
+       "zero IV")
+      (expect-crypto-error
+       (lambda ()
+         (aead-seal :aes-128-gcm
+                    (%aes-gcm-bytes "00000000000000000000000000000000")
+                    #(0) (length-only-octets (1+ max-data-bytes)) #()))
+       "plaintext upper boundary")
+      (expect-crypto-error
+       (lambda ()
+         (aead-open :aes-128-gcm
+                    (%aes-gcm-bytes "00000000000000000000000000000000")
+                    #(0)
+                    (length-only-octets (+ 16 (1+ max-data-bytes)))
+                    #()))
+       "ciphertext upper boundary")
+      (expect-crypto-error
+       (lambda ()
+         (aead-open :aes-128-gcm
+                    (%aes-gcm-bytes "00000000000000000000000000000000")
+                    #()
+                    (make-array 16 :element-type '(unsigned-byte 8)
+                                :initial-element 0)
+                    #()))
+       "open zero IV")
+      (format t "cl-crypto-kit: AES-GCM public API boundary tests passed (4 checks)~%")))
   t)
