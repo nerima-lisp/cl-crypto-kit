@@ -321,6 +321,8 @@
     ))
 
 (defun run-wycheproof-aes-gcm-tests ()
+  (assert (plusp (length +wycheproof-aes-gcm+)))
+  (assert (= (length +wycheproof-aes-gcm+) 316))
   (dolist (vector +wycheproof-aes-gcm+)
     (destructuring-bind (algorithm key nonce aad plaintext ciphertext tag result tc-id) vector
       (let* ((key (%aes-gcm-bytes key)) (nonce (%aes-gcm-bytes nonce))
