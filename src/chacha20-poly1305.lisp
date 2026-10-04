@@ -28,6 +28,7 @@
   (poly1305 key data))
 
 (defun %chacha-aead-seal (key nonce plaintext aad)
+  (%validate-chacha20-keystream-range 1 (length plaintext))
   (let* ((one-time-key (subseq (%chacha-block key 0 nonce) 0 32))
          (ciphertext (%chacha-xor plaintext
                                   (chacha20-keystream key 1 nonce (length plaintext))))
@@ -44,17 +45,18 @@
 (defun %chacha-aead-open (key nonce ciphertext-and-tag aad)
   (when (< (length ciphertext-and-tag) 16)
     (error 'aead-authentication-failure))
-  (let* ((ciphertext-length (- (length ciphertext-and-tag) 16))
-         (ciphertext (subseq ciphertext-and-tag 0 ciphertext-length))
-         (received-tag (subseq ciphertext-and-tag ciphertext-length))
-         (one-time-key (subseq (%chacha-block key 0 nonce) 0 32))
-         (expected-tag (%poly1305-mac one-time-key
-                                      (%chacha-aead-mac-data aad ciphertext))))
-    (unless (and (= (length expected-tag) 16)
-                 (constant-time-equal expected-tag received-tag))
-      (error 'aead-authentication-failure))
-    (%chacha-xor ciphertext
-                 (chacha20-keystream key 1 nonce (length ciphertext)))))
+  (let* ((ciphertext-length (- (length ciphertext-and-tag) 16)))
+    (%validate-chacha20-keystream-range 1 ciphertext-length)
+    (let* ((ciphertext (subseq ciphertext-and-tag 0 ciphertext-length))
+           (received-tag (subseq ciphertext-and-tag ciphertext-length)))
+      (let* ((one-time-key (subseq (%chacha-block key 0 nonce) 0 32))
+             (expected-tag (%poly1305-mac one-time-key
+                                          (%chacha-aead-mac-data aad ciphertext))))
+        (unless (and (= (length expected-tag) 16)
+                     (constant-time-equal expected-tag received-tag))
+          (error 'aead-authentication-failure))
+        (%chacha-xor ciphertext
+                     (chacha20-keystream key 1 nonce (length ciphertext)))))))
 
 (defun aead-seal (algorithm key nonce plaintext aad)
   (case algorithm
@@ -63,8 +65,6 @@
        (crypto-error "ChaCha20-Poly1305 requires a 32-octet key"))
      (unless (= (length nonce) 12)
        (crypto-error "ChaCha20-Poly1305 requires a 12-octet nonce"))
-     (unless (<= (length plaintext) +chacha20-max-bytes+)
-       (crypto-error "ChaCha20-Poly1305 plaintext is too long"))
      (%chacha-aead-seal key nonce plaintext aad))
     ((:aes-128-gcm :aes-192-gcm :aes-256-gcm)
      (%aes-gcm-aead-seal algorithm key nonce plaintext aad))
@@ -77,9 +77,6 @@
        (crypto-error "ChaCha20-Poly1305 requires a 32-octet key"))
      (unless (= (length nonce) 12)
        (crypto-error "ChaCha20-Poly1305 requires a 12-octet nonce"))
-     (when (and (>= (length ciphertext-and-tag) 16)
-                (> (- (length ciphertext-and-tag) 16) +chacha20-max-bytes+))
-       (crypto-error "ChaCha20-Poly1305 ciphertext is too long"))
      (%chacha-aead-open key nonce ciphertext-and-tag aad))
     ((:aes-128-gcm :aes-192-gcm :aes-256-gcm)
      (%aes-gcm-aead-open algorithm key nonce ciphertext-and-tag aad))

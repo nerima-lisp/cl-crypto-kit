@@ -163,6 +163,28 @@
              (chacha20-keystream key 1 nonce
                                 (1+ (* (1- (ash 1 32)) 64))))
            "chacha20-keystream length")
+          (incf checks)
+          (%chacha-check (= 64 (length (chacha20-keystream key (1- (ash 1 32)) nonce 64)))
+                         "ChaCha20 max counter one block")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key (1- (ash 1 32)) nonce 65))
+           "chacha20-keystream max counter two blocks")
+          (incf checks)
+          (%chacha-check (= 0 (length (chacha20-keystream key (1- (ash 1 32)) nonce 0)))
+                         "ChaCha20 max counter zero length")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key (ash 1 32) nonce 0))
+           "chacha20-keystream counter range")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key -1 nonce 0))
+           "chacha20-keystream negative counter")
+          (check-crypto-error
+           (lambda ()
+             (chacha20-keystream key 1.0 nonce 0))
+           "chacha20-keystream non-integer counter")
           (check-crypto-error
            (lambda ()
              (aead-seal :chacha20-poly1305
@@ -186,7 +208,13 @@
              (aead-open :chacha20-poly1305 key
                         (make-array 11 :element-type '(unsigned-byte 8))
                         (make-array 16 :element-type '(unsigned-byte 8)) #()))
-           "aead-open nonce")))
+           "aead-open nonce")
+          (incf checks)
+          (%chacha-check (equalp (aead-open :chacha20-poly1305 key nonce
+                                            (aead-seal :chacha20-poly1305 key nonce #() #())
+                                            #())
+                                #())
+                         "ChaCha20-Poly1305 zero-length boundary")))
     (format t "cl-crypto-kit: ChaCha20/Poly1305 tests passed (~D checks)~%" checks)
     t))
 
