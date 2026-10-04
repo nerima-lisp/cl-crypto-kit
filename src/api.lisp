@@ -10,10 +10,15 @@
   octets)
 
 (defun p256-generate-keypair ()
-  (let* ((private (random-octets 32))
-         (scalar (mod (ec-octets-int private) (1- (ec-curve-n +p256+)))))
-    (when (zerop scalar)
-      (setf scalar 1))
+  (let ((scalar nil))
+    (dotimes (attempt 128)
+      (let ((candidate (ec-octets-int (random-octets 32))))
+        (when (and (> candidate 0) (< candidate (ec-curve-n +p256+)))
+          (setf scalar candidate)
+          (return))))
+    (unless scalar
+      (error 'csprng-error
+             :message "Could not sample a P-256 private scalar"))
     (values (ec-int-octets scalar 32)
             (ec-encode-point (ec-mul scalar
                                       (ec-point (ec-curve-gx +p256+)

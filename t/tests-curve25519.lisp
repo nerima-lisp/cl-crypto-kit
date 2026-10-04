@@ -30,6 +30,16 @@
      "RFC 7748 X25519 vector failed")
     (check-curve25519 (not all-zero-p) "RFC 7748 vector marked all-zero"))
   (multiple-value-bind (output all-zero-p)
+      (x25519-base
+       (curve25519-hex
+        "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"))
+    (check-curve25519
+     (equalp output
+             (curve25519-hex
+              "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"))
+     "X25519 base-point wrapper failed")
+    (check-curve25519 (not all-zero-p) "X25519 base-point output marked all-zero"))
+  (multiple-value-bind (output all-zero-p)
       (x25519 (make-array 32 :element-type '(unsigned-byte 8))
               (make-array 32 :element-type '(unsigned-byte 8)))
     (check-curve25519 all-zero-p "X25519 all-zero output was not reported")

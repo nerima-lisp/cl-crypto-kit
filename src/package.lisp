@@ -13,4 +13,4 @@
            #:make-rsa-public-key #:make-ec-public-key #:make-ed25519-public-key
            #:aead-authentication-failure #:crypto-error
            #:crypto-error-message #:csprng-error
-           #:csprng-error-message #:x25519 #:ed25519-verify))
+           #:csprng-error-message #:x25519 #:x25519-base #:ed25519-verify))

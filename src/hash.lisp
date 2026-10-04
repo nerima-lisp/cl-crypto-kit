@@ -70,15 +70,36 @@
      #x28db77f523047d84 #x32caab7b40c72493 #x3c9ebe0a15c9bebc #x431d67c49c100d4c
      #x4cc5d4becb3e42b6 #x597f299cfc657e2a #x5fcb6fab3ad6faec #x6c44198c4a475817))
 
+(defparameter +md5-k+
+  #( #xd76aa478 #xe8c7b756 #x242070db #xc1bdceee #xf57c0faf #x4787c62a
+     #xa8304613 #xfd469501 #x698098d8 #x8b44f7af #xffff5bb1 #x895cd7be
+     #x6b901122 #xfd987193 #xa679438e #x49b40821 #xf61e2562 #xc040b340
+     #x265e5a51 #xe9b6c7aa #xd62f105d #x02441453 #xd8a1e681 #xe7d3fbc8
+     #x21e1cde6 #xc33707d6 #xf4d50d87 #x455a14ed #xa9e3e905 #xfcefa3f8
+     #x676f02d9 #x8d2a4c8a #xfffa3942 #x8771f681 #x6d9d6122 #xfde5380c
+     #xa4beea44 #x4bdecfa9 #xf6bb4b60 #xbebfbc70 #x289b7ec6 #xeaa127fa
+     #xd4ef3085 #x04881d05 #xd9d4d039 #xe6db99e5 #x1fa27cf8 #xc4ac5665
+     #xf4292244 #x432aff97 #xab9423a7 #xfc93a039 #x655b59c3 #x8f0ccc92
+     #xffeff47d #x85845dd1 #x6fa87e4f #xfe2ce6e0 #xa3014314 #x4e0811a1
+     #xf7537e82 #xbd3af235 #x2ad7d2bb #xeb86d391))
+
+(defparameter +md5-shifts+
+  #(7 12 17 22  7 12 17 22  7 12 17 22  7 12 17 22
+    5  9 14 20  5  9 14 20  5  9 14 20  5  9 14 20
+    4 11 16 23  4 11 16 23  4 11 16 23  4 11 16 23
+    6 10 15 21  6 10 15 21  6 10 15 21  6 10 15 21))
+
 (defstruct (digest-state (:constructor %make-state)) algorithm h buffer length)
 (defun digest-params (algorithm)
   (case algorithm
-    (:sha1 (values 32 20 64)) (:sha256 (values 32 32 64))
+    (:md5 (values 32 16 64)) (:sha1 (values 32 20 64))
+    (:sha256 (values 32 32 64))
     (:sha384 (values 64 48 128)) (:sha512 (values 64 64 128))
     (otherwise (crypto-error "Unknown digest algorithm ~S" algorithm))))
 (defun digest-length (algorithm) (nth-value 1 (digest-params algorithm)))
 (defun initial-state (algorithm)
   (case algorithm
+    (:md5 (copy-seq #( #x67452301 #xefcdab89 #x98badcfe #x10325476)))
     (:sha1 (copy-seq #( #x67452301 #xefcdab89 #x98badcfe #x10325476 #xc3d2e1f0)))
     (:sha256 (copy-seq #( #x6a09e667 #xbb67ae85 #x3c6ef372 #xa54ff53a #x510e527f
                           #x9b05688c #x1f83d9ab #x5be0cd19)))
@@ -110,6 +131,31 @@
                (psetf e d d c c (rotl32 b 30) b a a t1)))
     (loop for i below 5 for value in (list a b c d e)
           do (setf (aref h i) (addmod 32 (aref h i) value))) h))
+
+(defun md5-compress (h block)
+  (let ((m (make-array 16))
+        (a (aref h 0)) (b (aref h 1)) (c (aref h 2)) (d (aref h 3)))
+    (loop for i below 16
+          do (setf (aref m i)
+                   (logior (aref block (* i 4))
+                           (ash (aref block (+ (* i 4) 1)) 8)
+                           (ash (aref block (+ (* i 4) 2)) 16)
+                           (ash (aref block (+ (* i 4) 3)) 24))))
+    (loop for i below 64
+          do (let* ((f (cond ((< i 16) (logior (logand b c) (logand (lognot b) d)))
+                             ((< i 32) (logior (logand d b) (logand (lognot d) c)))
+                             ((< i 48) (logxor b c d))
+                             (t (logxor c (logior b (lognot d))))))
+                    (g (cond ((< i 16) i)
+                             ((< i 32) (mod (+ (* 5 i) 1) 16))
+                             ((< i 48) (mod (+ (* 3 i) 5) 16))
+                             (t (mod (* 7 i) 16))))
+                    (next (addmod 32 a f (aref m g) (aref +md5-k+ i))))
+               (setf a d d c c b b (addmod 32 b (rotl32 next (aref +md5-shifts+ i))))))
+    (setf (aref h 0) (addmod 32 (aref h 0) a)
+          (aref h 1) (addmod 32 (aref h 1) b)
+          (aref h 2) (addmod 32 (aref h 2) c)
+          (aref h 3) (addmod 32 (aref h 3) d)) h))
 
 (defun sha256-compress (h block)
   (let ((w (make-array 64 :element-type '(unsigned-byte 32) :initial-element 0))
@@ -177,6 +223,7 @@
 
 (defun compress (state block)
   (case (digest-state-algorithm state)
+    (:md5 (md5-compress (digest-state-h state) block))
     (:sha1 (sha1-compress (digest-state-h state) block))
     (:sha256 (sha256-compress (digest-state-h state) block))
     ((:sha384 :sha512) (sha512-compress (digest-state-h state) block))))
@@ -212,12 +259,26 @@
            (low (logand message-bits +u64+))
            (high (if (= length-bytes 16)
                      (logand (floor message-bits (ash 1 64)) +u64+) 0)))
-      (replace padding (put-be high 8) :start1 (- padding-length length-bytes))
-      (replace padding (put-be low 8) :start1 (- padding-length 8)))
+      (if (eq (digest-state-algorithm copy) :md5)
+          (replace padding
+                   (make-array 8 :element-type '(unsigned-byte 8)
+                               :initial-contents
+                               (loop for i below 8 collect (ldb (byte 8 (* i 8)) low)))
+                   :start1 (- padding-length 8))
+          (progn
+            (replace padding (put-be high 8) :start1 (- padding-length length-bytes))
+            (replace padding (put-be low 8) :start1 (- padding-length 8))))
     (digest-update copy padding)
     (apply #'concat-octets
            (loop for value across (digest-state-h copy)
                  for i below (/ output-bytes (/ word-bits 8))
-                 collect (put-be value (/ word-bits 8))))))
+                 collect (if (eq (digest-state-algorithm copy) :md5)
+                             (make-array 4 :element-type '(unsigned-byte 8)
+                                         :initial-contents
+                                         (list (ldb (byte 8 0) value)
+                                               (ldb (byte 8 8) value)
+                                               (ldb (byte 8 16) value)
+                                               (ldb (byte 8 24) value)))
+                             (put-be value (/ word-bits 8))))))))
 (defun digest (algorithm octets)
   (digest-final (digest-update (make-digest algorithm) octets)))

@@ -1,4 +1,3 @@
-(defpackage #:crypto-kit/test (:use #:cl #:crypto-kit) (:export #:run-tests))
 (in-package #:crypto-kit/test)
 
 ; RFC 2202: https://www.rfc-editor.org/rfc/rfc2202.html
@@ -6,6 +5,25 @@
 ; RFC 5869: https://www.rfc-editor.org/rfc/rfc5869.html
 (defun bytes (s) (let ((v (make-array (/ (length s) 2) :element-type (quote (unsigned-byte 8))))) (dotimes (i (length v) v) (setf (aref v i) (parse-integer s :start (* 2 i) :end (+ (* 2 i) 2) :radix 16)))))
 (defun checkv (a e label) (unless (equalp a (bytes e)) (error "~A" label)))
+(defparameter +md5-vectors+
+  '(("" "d41d8cd98f00b204e9800998ecf8427e")
+    ("a" "0cc175b9c0f1b6a831c399e269772661")
+    ("abc" "900150983cd24fb0d6963f7d28e17f72")
+    ("message digest" "f96b697d7cb7938d525a2f31aaf161d0")
+    ("abcdefghijklmnopqrstuvwxyz" "c3fcd3d76192e4007dfb496cca67e13b")
+    ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+     "d174ab98d277d9f5a5611c2c9f419d9f")
+    ("12345678901234567890123456789012345678901234567890123456789012345678901234567890"
+     "57edf4a22be3c955ac49da2e2107b67a")))
+(defun run-md5-tests ()
+  (dolist (vector +md5-vectors+)
+    (destructuring-bind (message expected) vector
+      (checkv (digest :md5 (map '(vector (unsigned-byte 8)) #'char-code message))
+              expected "RFC 1321 MD5")))
+  (checkv (digest-final (digest-update (make-digest :md5)
+                                      (map '(vector (unsigned-byte 8)) #'char-code "abc")))
+          "900150983cd24fb0d6963f7d28e17f72" "MD5 incremental")
+  (1+ (length +md5-vectors+)))
 (defparameter +rfc-hmac+ (list
  (list :sha1 "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" "4869205468657265" "b617318655057264e28bc0b6fb378c8ef146be00")
  (list :sha1 "4a656665" "7768617420646f2079612077616e7420666f72206e6f7468696e673f" "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79")
@@ -45,7 +63,8 @@
  (list :sha1 "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" "" "" 42 "da8c8a73c7fa77288ec6f5e7c297786aa0d32d01" "0ac1af7002b3d761d1e55298da9d0506b9ae52057220a306e07b6b87e8df21d0ea00033de03984d34918")
  (list :sha1 "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c" "" "" 42 "2adccada18779e7c2077ad2eb19d3f3e731385dd" "2c91117204d745f3500d636a62f64f0ab3bae548aa53d423b0d1f27ebba6f5e5673a081d70cce7acfc48")
 ))
-(defun run-tests ()
+(defun run-vector-tests ()
+(let ((md5-count (run-md5-tests)))
 (dolist (v +rfc-hmac+) (destructuring-bind (a k d e) v (let ((actual (hmac a (bytes k) (bytes d)))) (checkv actual e "RFC HMAC") (when (string= d "546573742057697468205472756e636174696f6e") (checkv (subseq actual 0 16) (subseq e 0 32) "RFC HMAC truncation")))))
  (dolist (v +rfc-hkdf+) (destructuring-bind (a i s info n p o) v (checkv (hkdf-extract a (bytes s) (bytes i)) p "RFC HKDF extract") (checkv (hkdf-expand a (bytes p) (bytes info) n) o "RFC HKDF expand")))
  (checkv (hkdf-extract :sha256
@@ -62,4 +81,5 @@
  (run-wycheproof-curve25519-tests)
  (run-rsa-tests)
  (run-ec-tests)
- (format t "cl-crypto-kit: RFC HMAC ~D, RFC HKDF ~D vectors passed~%" (length +rfc-hmac+) (length +rfc-hkdf+)) t)
+ (format t "cl-crypto-kit: MD5 ~D, RFC HMAC ~D, RFC HKDF ~D vectors passed~%"
+         md5-count (length +rfc-hmac+) (length +rfc-hkdf+)) t))

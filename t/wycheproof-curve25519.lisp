@@ -683,6 +683,8 @@
     (:ed25519 "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a" "313233343030" "0100000000000000000000000000000000000000000000000000000000000080c803ee1f2342aa96ff698a393d1ab5e66f3eda101d6d120b394c3fd32c117d0a" :invalid 151)
   ))
 (defun run-wycheproof-curve25519-tests ()
+  (assert (plusp (length +wycheproof-x25519+)))
+  (assert (= (length +wycheproof-x25519+) 518))
   (dolist (vector +wycheproof-x25519+)
     (destructuring-bind (algorithm private public expected result tc-id) vector
       (declare (ignore algorithm))
@@ -694,6 +696,8 @@
           (error "Unexpected X25519 result tcId ~D" tc-id))
         (unless (equalp actual (%wycheproof-curve25519-hex expected))
           (error "Wycheproof X25519 tcId ~D failed" tc-id)))))
+  (assert (plusp (length +wycheproof-ed25519+)))
+  (assert (= (length +wycheproof-ed25519+) 151))
   (dolist (vector +wycheproof-ed25519+)
     (destructuring-bind (algorithm public message signature result tc-id) vector
       (declare (ignore algorithm))
