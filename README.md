@@ -1,7 +1,7 @@
 # cl-crypto-kit
 
-Pure Common Lisp cryptographic primitives for SBCL on macOS and Linux. Public
-octet data uses `(simple-array (unsigned-byte 8) (*))`.
+Pure Common Lisp cryptographic primitives for SBCL. The verified and provided
+target is Linux x86_64. Public octet data uses `(simple-array (unsigned-byte 8) (*))`.
 
 ## Getting started
 
