@@ -11,7 +11,7 @@
 
   outputs = { self, nixpkgs, cl-weave, ... }:
     let
-      systems = [ "x86_64-linux" ];
+      systems = [ "aarch64-darwin" "x86_64-linux" ];
       asd = builtins.readFile ./cl-crypto-kit.asd;
       version = builtins.elemAt
         (builtins.split "\""
