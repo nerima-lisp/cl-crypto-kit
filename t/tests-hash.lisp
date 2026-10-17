@@ -31,7 +31,43 @@
       (loop for start from 0 below (length message) by 7
             do (digest-update state (ascii message) :start start
                              :end (min (length message) (+ start 7))))
-      (expect (digest-final state) :to-equalp (hex "57edf4a22be3c955ac49da2e2107b67a")))))
+      (expect (digest-final state) :to-equalp (hex "57edf4a22be3c955ac49da2e2107b67a"))))
+  (it "returns lowercase hexadecimal digests for standard vectors"
+    (let* ((million-a (ascii (make-string 1000000 :initial-element #\a)))
+           (vectors
+             (list
+              (list :md5
+                    "d41d8cd98f00b204e9800998ecf8427e"
+                    "900150983cd24fb0d6963f7d28e17f72"
+                    "7707d6ae4e027c70eea2a935c2296f21")
+              (list :sha1
+                    "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+                    "a9993e364706816aba3e25717850c26c9cd0d89d"
+                    "34aa973cd4c4daa4f61eeb2bdbad27316534016f")
+              (list :sha256
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                    "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0")
+              (list :sha384
+                    "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b"
+                    "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
+                    "9d0e1809716474cb086e834e310a4a1ced149e9c00f248527972cec5704c2a5b07b8b3dc38ecc4ebae97ddd87f3d8985")
+              (list :sha512
+                    "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+                    "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+                    "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"))))
+      (expect (stringp (digest-hex :sha256 (ascii "abc"))) :to-be t)
+      (dolist (vector vectors)
+        (let ((algorithm (first vector)))
+          (expect (string= (digest-hex algorithm #()) (second vector)) :to-be t)
+          (expect (string= (digest-hex algorithm (ascii "abc")) (third vector)) :to-be t)
+          (expect (string= (digest-hex algorithm million-a) (fourth vector)) :to-be t)))
+      (expect (string= (md5-hex (ascii "abc")) "900150983cd24fb0d6963f7d28e17f72") :to-be t)
+      (expect (string= (sha1-hex (ascii "abc")) "a9993e364706816aba3e25717850c26c9cd0d89d") :to-be t)
+      (expect (string= (sha256-hex (ascii "abc")) "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") :to-be t)
+      (expect (string= (sha384-hex (ascii "abc")) "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7") :to-be t)
+      (expect (string= (sha512-hex (ascii "abc")) "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f") :to-be t)
+      (expect (string= (content-hash (ascii "abc")) "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") :to-be t))))
 
 (describe "HMAC and HKDF"
   (it "matches RFC 4231 HMAC-SHA-256 case 1"

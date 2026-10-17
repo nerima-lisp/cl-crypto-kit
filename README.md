@@ -9,6 +9,7 @@ Load `cl-crypto-kit.asd` with ASDF, then use the `crypto-kit` package:
 
 ```lisp
 (asdf:load-system "cl-crypto-kit")
+(crypto-kit:sha256-hex (make-array 0 :element-type '(unsigned-byte 8)))
 (crypto-kit:digest :sha256 (make-array 0 :element-type '(unsigned-byte 8)))
 ```
 
@@ -27,8 +28,11 @@ one-shot `digest` operation and the incremental `make-digest`,
 
 - Digests: `digest`, `make-digest`, `digest-update`, `digest-copy`,
   `digest-final`, and `digest-length` for `:md5`, `:sha1`, `:sha256`, `:sha384`,
-  and `:sha512`. MD5 is provided for compatibility and should not be used for
-  new security-sensitive designs.
+  and `:sha512`. The one-shot `digest` function returns octets. Use `digest-hex`
+  for a lowercase hexadecimal string, or use `md5-hex`, `sha1-hex`, `sha256-hex`,
+  `sha384-hex`, and `sha512-hex` for algorithm-specific helpers. `content-hash`
+  is an alias for `sha256-hex`. MD5 is provided for compatibility and should not
+  be used for new security-sensitive designs.
 - Authentication and derivation: `hmac`, `hkdf-extract`, `hkdf-expand`, and
   `constant-time-equal`.
 - AEAD: `aead-seal` and `aead-open` for `:aes-128-gcm`, `:aes-192-gcm`,

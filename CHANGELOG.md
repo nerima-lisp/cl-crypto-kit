@@ -4,6 +4,7 @@ All notable changes to cl-crypto-kit are documented here.
 
 ## [0.1.0] - Unreleased
 
+- Added lowercase hexadecimal digest functions and the SHA-256 `content-hash` alias.
 - Added MD5, SHA-1, SHA-256, SHA-384, and SHA-512 digest operations.
 - Added HMAC, HKDF, AES-GCM, and ChaCha20-Poly1305 primitives.
 - Added AES, ChaCha20, Poly1305, X25519, and CSPRNG primitives.
