@@ -282,3 +282,14 @@
                              (put-be value (/ word-bits 8))))))))
 (defun digest (algorithm octets)
   (digest-final (digest-update (make-digest algorithm) octets)))
+(defun octets-to-hex (octets)
+  (let ((digits "0123456789abcdef")
+        (hex (make-string (* 2 (length octets)))))
+    (loop for byte across octets
+          for index from 0
+          for position = (* 2 index)
+          do (setf (aref hex position) (char digits (ash byte -4))
+                   (aref hex (1+ position)) (char digits (logand byte #x0f))))
+    hex))
+(defun digest-hex (algorithm octets)
+  (octets-to-hex (digest algorithm octets)))
