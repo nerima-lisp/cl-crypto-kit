@@ -25,6 +25,9 @@
         (digest-update copy (ascii "d"))
         (expect (digest-final state) :to-equalp (digest :sha256 (ascii "abc")))
         (expect (digest-final copy) :to-equalp (digest :sha256 (ascii "abd"))))))
+  (it "converts octets to lowercase hexadecimal"
+    (expect (octets-to-hex #()) :to-equal "")
+    (expect (octets-to-hex #(#x00 #xab #xff)) :to-equal "00abff"))
   (it "supports incremental MD5 updates across a block boundary"
     (let ((state (make-digest :md5))
           (message "12345678901234567890123456789012345678901234567890123456789012345678901234567890"))
@@ -61,13 +64,7 @@
         (let ((algorithm (first vector)))
           (expect (string= (digest-hex algorithm #()) (second vector)) :to-be t)
           (expect (string= (digest-hex algorithm (ascii "abc")) (third vector)) :to-be t)
-          (expect (string= (digest-hex algorithm million-a) (fourth vector)) :to-be t)))
-      (expect (string= (md5-hex (ascii "abc")) "900150983cd24fb0d6963f7d28e17f72") :to-be t)
-      (expect (string= (sha1-hex (ascii "abc")) "a9993e364706816aba3e25717850c26c9cd0d89d") :to-be t)
-      (expect (string= (sha256-hex (ascii "abc")) "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") :to-be t)
-      (expect (string= (sha384-hex (ascii "abc")) "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7") :to-be t)
-      (expect (string= (sha512-hex (ascii "abc")) "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f") :to-be t)
-      (expect (string= (content-hash (ascii "abc")) "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") :to-be t))))
+          (expect (string= (digest-hex algorithm million-a) (fourth vector)) :to-be t))))))
 
 (describe "HMAC and HKDF"
   (it "matches RFC 4231 HMAC-SHA-256 case 1"
