@@ -2,7 +2,7 @@
 
 (asdf:defsystem "cl-crypto-kit"
   :description "Pure Common Lisp cryptographic primitives."
-  :author "nerima-lisp" :license "MIT" :version "0.2.0"
+  :author "nerima-lisp" :license "MIT" :version "0.2.1"
   :homepage "https://github.com/nerima-lisp/cl-crypto-kit"
   :source-control "https://github.com/nerima-lisp/cl-crypto-kit.git"
   :depends-on () :pathname "src" :serial t
