@@ -1,7 +1,7 @@
 # cl-crypto-kit
 
-Pure Common Lisp cryptographic primitives for SBCL. The supported targets are
-macOS aarch64 and Linux x86_64. Public octet data uses
+Pure Common Lisp cryptographic primitives for SBCL. The flake declares checks
+for macOS aarch64 and Linux x86_64. Public octet data uses
 `(simple-array (unsigned-byte 8) (*))`.
 
 ## Getting started
@@ -96,11 +96,11 @@ public inputs and bignum arithmetic.
 ## Verification
 
 The ASDF test suite runs NIST, RFC, and Wycheproof vectors, including
-tampering-rejection cases. `nix flake check --all-systems` runs that suite and
-the OpenSSL hash comparison on macOS aarch64 and Linux x86_64.
+tampering-rejection cases. On Ubuntu x86_64, CI runs that suite and compares
+hashes against OpenSSL. CI does not run the flake's aarch64-darwin check.
 
 ```sh
-nix flake check --all-systems
+nix flake check
 ```
 
 ## Digest benchmark

@@ -10,4 +10,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16
       - run: nix flake check
+      - run: "nix log .#checks.x86_64-linux.test | grep -E 'cl-crypto-kit: Signature checks [1-9][0-9]* passed'"
       - run: nix flake check --no-build

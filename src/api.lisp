@@ -60,15 +60,23 @@
   ((scalar :initarg :scalar :reader %ec-private-key-scalar)))
 
 (defclass ed25519-private-key ()
-  ((seed :initarg :seed :reader %ed25519-private-key-seed)))
+  ((seed :initarg :seed :reader %ed25519-private-key-seed)
+   (public-key-octets :initarg :public-key-octets
+                      :reader %ed25519-private-key-public-key)))
 
 (defmethod print-object ((key ec-private-key) stream)
   (print-unreadable-object (key stream :type t)
     (write-string "[REDACTED]" stream)))
+(defmethod describe-object ((key ec-private-key) stream)
+  (declare (ignore key))
+  (format stream "~&EC private key; material redacted.~%"))
 
 (defmethod print-object ((key ed25519-private-key) stream)
   (print-unreadable-object (key stream :type t)
     (write-string "[REDACTED]" stream)))
+(defmethod describe-object ((key ed25519-private-key) stream)
+  (declare (ignore key))
+  (format stream "~&Ed25519 private key; material redacted.~%"))
 
 (defun make-ec-private-key (curve scalar-octets)
   (unless (member curve '(:p256 p256))
@@ -84,7 +92,11 @@
   (unless (and (typep seed '(vector (unsigned-byte 8)))
                (= (length seed) 32))
     (error 'crypto-error :message "Ed25519 seed must contain 32 octets"))
-  (make-instance 'ed25519-private-key :seed (copy-seq seed)))
+  (let* ((seed-copy (copy-seq seed))
+         (public-key (ed25519-public-key-from-seed seed-copy)))
+    (make-instance 'ed25519-private-key
+                   :seed seed-copy
+                   :public-key-octets public-key)))
 
 (defgeneric private-key-public-key (private-key))
 
@@ -95,7 +107,7 @@
 
 (defmethod private-key-public-key ((private-key ed25519-private-key))
   (make-ed25519-public-key
-   (ed25519-public-key-from-seed (%ed25519-private-key-seed private-key))))
+   (copy-seq (%ed25519-private-key-public-key private-key))))
 
 (defmethod private-key-public-key ((private-key t))
   (declare (ignore private-key))
@@ -109,9 +121,14 @@
               "ECDSA P-256 requires a P-256 private key"))
      (ecdsa-sign-p256 message (%ec-private-key-scalar private-key)))
     (:ed25519
+     (unless (typep message '(vector (unsigned-byte 8)))
+       (error 'crypto-error :message
+              "Ed25519 message must be an octet vector"))
      (unless (typep private-key 'ed25519-private-key)
        (error 'crypto-error :message
               "Ed25519 requires an Ed25519 private key"))
-     (ed25519-sign (%ed25519-private-key-seed private-key) message))
+     (ed25519-sign (%ed25519-private-key-seed private-key)
+                   message
+                   (%ed25519-private-key-public-key private-key)))
     (otherwise
      (error 'crypto-error :message "Unsupported signature scheme"))))

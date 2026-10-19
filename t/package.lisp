@@ -5,6 +5,7 @@
                 #:run-all #:signals)
   (:export #:run-tests))
 (in-package #:crypto-kit/test)
+(defvar *signature-test-count* 0)
 (defun hex (string)
   (let ((out (make-array (/ (length string) 2) :element-type '(unsigned-byte 8))))
     (loop for i below (length out) do (setf (aref out i) (parse-integer string :start (* i 2) :end (+ (* i 2) 2) :radix 16))) out))
