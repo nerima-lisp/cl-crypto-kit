@@ -1,11 +1,16 @@
 (in-package #:crypto-kit)
+#+sbcl
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (require :sb-md5))
 
 (deftype octets () '(simple-array (unsigned-byte 8) (*)))
 (defconstant +u32+ #xffffffff)
 (defconstant +u64+ #xffffffffffffffff)
 
 (declaim (optimize (speed 3) (safety 1) (debug 0)))
-(declaim (inline mask-word rotr rotl32 read-be put-be))
+(declaim (inline mask-word rotr rotl32 rotr32 read-be put-be
+                 sha1-compress-source sha256-compress-source)
+         (type (simple-array (unsigned-byte 32) (64)) +sha256-k+))
 
 (defun mask-word (value bits) (ldb (byte bits 0) value))
 (defun rotr (value count bits)
@@ -13,10 +18,20 @@
     (mask-word (logior (ash value (- count))
                        (ash (ldb (byte count 0) value) (- bits count))) bits)))
 (defun rotl32 (value count)
-  (let ((value (mask-word value 32)))
-    (mask-word (logior (ash value count) (ash value (- count 32))) 32)))
+  (declare (type (unsigned-byte 32) value)
+           (type (integer 0 31) count)
+           (optimize (speed 3) (safety 1) (debug 0)))
+  (logand #xffffffff
+          (logior (ash value count) (ash value (- count 32)))))
+(defun rotr32 (value count) (declare (type (unsigned-byte 32) value) (type (integer 0 31) count) (optimize (speed 3) (safety 1) (debug 0))) (logand #xffffffff (logior (ash value (- count)) (ash value (- 32 count)))))
 (defmacro addmod (bits &rest values)
-  `(mask-word (+ ,@values) ,bits))
+  (let ((mask (case bits
+                (32 #xffffffff)
+                (64 #xffffffffffffffff)
+                (otherwise (error "Unsupported digest word size ~S" bits)))))
+    (reduce (lambda (left right)
+              `(logand ,mask (+ ,left ,right)))
+            values)))
 (defun read-be (octets start size)
   (let ((value 0))
     (loop for i below size
@@ -37,17 +52,18 @@
 
 (defparameter +sha1-k+ #( #x5a827999 #x6ed9eba1 #x8f1bbcdc #xca62c1d6))
 (defparameter +sha256-k+
-  #( #x428a2f98 #x71374491 #xb5c0fbcf #xe9b5dba5 #x3956c25b #x59f111f1
-     #x923f82a4 #xab1c5ed5 #xd807aa98 #x12835b01 #x243185be #x550c7dc3
-     #x72be5d74 #x80deb1fe #x9bdc06a7 #xc19bf174 #xe49b69c1 #xefbe4786
-     #x0fc19dc6 #x240ca1cc #x2de92c6f #x4a7484aa #x5cb0a9dc #x76f988da
-     #x983e5152 #xa831c66d #xb00327c8 #xbf597fc7 #xc6e00bf3 #xd5a79147
-     #x06ca6351 #x14292967 #x27b70a85 #x2e1b2138 #x4d2c6dfc #x53380d13
-     #x650a7354 #x766a0abb #x81c2c92e #x92722c85 #xa2bfe8a1 #xa81a664b
-     #xc24b8b70 #xc76c51a3 #xd192e819 #xd6990624 #xf40e3585 #x106aa070
-     #x19a4c116 #x1e376c08 #x2748774c #x34b0bcb5 #x391c0cb3 #x4ed8aa4a
-     #x5b9cca4f #x682e6ff3 #x748f82ee #x78a5636f #x84c87814 #x8cc70208
-     #x90befffa #xa4506ceb #xbef9a3f7 #xc67178f2))
+  (make-array 64 :element-type '(unsigned-byte 32) :initial-contents
+    '(#x428a2f98 #x71374491 #xb5c0fbcf #xe9b5dba5 #x3956c25b #x59f111f1
+      #x923f82a4 #xab1c5ed5 #xd807aa98 #x12835b01 #x243185be #x550c7dc3
+      #x72be5d74 #x80deb1fe #x9bdc06a7 #xc19bf174 #xe49b69c1 #xefbe4786
+      #x0fc19dc6 #x240ca1cc #x2de92c6f #x4a7484aa #x5cb0a9dc #x76f988da
+      #x983e5152 #xa831c66d #xb00327c8 #xbf597fc7 #xc6e00bf3 #xd5a79147
+      #x06ca6351 #x14292967 #x27b70a85 #x2e1b2138 #x4d2c6dfc #x53380d13
+      #x650a7354 #x766a0abb #x81c2c92e #x92722c85 #xa2bfe8a1 #xa81a664b
+      #xc24b8b70 #xc76c51a3 #xd192e819 #xd6990624 #xf40e3585 #x106aa070
+      #x19a4c116 #x1e376c08 #x2748774c #x34b0bcb5 #x391c0cb3 #x4ed8aa4a
+      #x5b9cca4f #x682e6ff3 #x748f82ee #x78a5636f #x84c87814 #x8cc70208
+      #x90befffa #xa4506ceb #xbef9a3f7 #xc67178f2)))
 (defparameter +sha512-k+
   #( #x428a2f98d728ae22 #x7137449123ef65cd #xb5c0fbcfec4d3b2f #xe9b5dba58189dbbc
      #x3956c25bf348b538 #x59f111f1b605d019 #x923f82a4af194f9b #xab1c5ed5da6d8118
@@ -100,9 +116,13 @@
 (defun initial-state (algorithm)
   (case algorithm
     (:md5 (copy-seq #( #x67452301 #xefcdab89 #x98badcfe #x10325476)))
-    (:sha1 (copy-seq #( #x67452301 #xefcdab89 #x98badcfe #x10325476 #xc3d2e1f0)))
-    (:sha256 (copy-seq #( #x6a09e667 #xbb67ae85 #x3c6ef372 #xa54ff53a #x510e527f
-                          #x9b05688c #x1f83d9ab #x5be0cd19)))
+    (:sha1 (make-array 5 :element-type '(unsigned-byte 32)
+                       :initial-contents
+                       '(#x67452301 #xefcdab89 #x98badcfe #x10325476 #xc3d2e1f0)))
+    (:sha256 (make-array 8 :element-type '(unsigned-byte 32)
+                         :initial-contents
+                         '(#x6a09e667 #xbb67ae85 #x3c6ef372 #xa54ff53a #x510e527f
+                           #x9b05688c #x1f83d9ab #x5be0cd19)))
     (:sha384 (copy-seq #( #xcbbb9d5dc1059ed8 #x629a292a367cd507 #x9159015a3070dd17
                           #x152fecd8f70e5939 #x67332667ffc00b31 #x8eb44a8768581511
                           #xdb0c2e0d64f98fa7 #x47b5481dbefa4fa4)))
@@ -114,23 +134,50 @@
   (%make-state :algorithm algorithm :h (initial-state algorithm)
                :buffer (make-array 0 :element-type '(unsigned-byte 8)) :length 0))
 
+(defun sha1-compress-source (h source start w)
+  (declare (type (simple-array (unsigned-byte 32) (*)) h)
+           (type octets source)
+           (type fixnum start)
+           (type (simple-array (unsigned-byte 32) (80)) w)
+           (optimize (speed 3) (safety 1) (debug 0)))
+  (loop for i of-type fixnum from 0 below 16
+        do (setf (aref w i)
+                 (logior (ash (aref source (+ start (* i 4))) 24)
+                         (ash (aref source (+ start (* i 4) 1)) 16)
+                         (ash (aref source (+ start (* i 4) 2)) 8)
+                         (aref source (+ start (* i 4) 3)))))
+  (loop for i of-type fixnum from 16 below 80
+        do (setf (aref w i)
+                 (rotl32 (logxor (aref w (- i 3)) (aref w (- i 8))
+                                 (aref w (- i 14)) (aref w (- i 16))) 1)))
+  (let ((a (aref h 0)) (b (aref h 1)) (c (aref h 2))
+        (d (aref h 3)) (e (aref h 4)))
+    (declare (type (unsigned-byte 32) a b c d e))
+    (loop for i of-type fixnum from 0 below 80
+          do (multiple-value-bind (f k)
+                 (cond ((< i 20) (values (logior (logand b c)
+                                                 (logand (logxor b #xffffffff) d))
+                                         #x5a827999))
+                       ((< i 40) (values (logxor b c d) #x6ed9eba1))
+                       ((< i 60) (values (logior (logand b c) (logand b d)
+                                                 (logand c d))
+                                         #x8f1bbcdc))
+                       (t (values (logxor b c d) #xca62c1d6)))
+               (declare (type (unsigned-byte 32) f k))
+               (let ((temp (addmod 32 (rotl32 a 5) f e k (aref w i))))
+                 (declare (type (unsigned-byte 32) temp))
+                 (setf e d d c c (rotl32 b 30) b a a temp))))
+    (setf (aref h 0) (addmod 32 (aref h 0) a)
+          (aref h 1) (addmod 32 (aref h 1) b)
+          (aref h 2) (addmod 32 (aref h 2) c)
+          (aref h 3) (addmod 32 (aref h 3) d)
+          (aref h 4) (addmod 32 (aref h 4) e)))
+  h)
 (defun sha1-compress (h block)
-  (let ((w (make-array 80 :initial-element 0)) (a (aref h 0)) (b (aref h 1))
-        (c (aref h 2)) (d (aref h 3)) (e (aref h 4)))
-    (loop for i below 16 do (setf (aref w i) (read-be block (* i 4) 4)))
-    (loop for i from 16 below 80
-          do (setf (aref w i) (rotl32 (logxor (aref w (- i 3)) (aref w (- i 8))
-                                              (aref w (- i 14)) (aref w (- i 16))) 1)))
-    (loop for i below 80
-          do (let* ((f (cond ((< i 20) (logior (logand b c) (logand (lognot b) d)))
-                             ((< i 40) (logxor b c d))
-                             ((< i 60) (logior (logand b c) (logand b d) (logand c d)))
-                             (t (logxor b c d))))
-                    (k (aref +sha1-k+ (floor i 20)))
-                    (t1 (addmod 32 (rotl32 a 5) f e k (aref w i))))
-               (psetf e d d c c (rotl32 b 30) b a a t1)))
-    (loop for i below 5 for value in (list a b c d e)
-          do (setf (aref h i) (addmod 32 (aref h i) value))) h))
+  (let ((w (make-array 80 :element-type '(unsigned-byte 32))))
+    (declare (type (simple-array (unsigned-byte 32) (80)) w)
+             (dynamic-extent w))
+    (sha1-compress-source h block 0 w)))
 
 (defun md5-compress (h block)
   (let ((m (make-array 16))
@@ -157,37 +204,52 @@
           (aref h 2) (addmod 32 (aref h 2) c)
           (aref h 3) (addmod 32 (aref h 3) d)) h))
 
-(defun sha256-compress (h block)
-  (let ((w (make-array 64 :element-type '(unsigned-byte 32) :initial-element 0))
-        (v (make-array 8 :element-type '(unsigned-byte 32))))
-    (declare (type (simple-array (unsigned-byte 32) (*)) w v)
-             (dynamic-extent w v))
-    (replace v h)
-    (loop for i below 16 do (setf (aref w i) (read-be block (* i 4) 4)))
-    (loop for i from 16 below 64
-          do (let ((x (aref w (- i 15))) (y (aref w (- i 2))))
-               (setf (aref w i)
-                     (addmod 32
-                             (logxor (rotr x 7 32) (rotr x 18 32) (ash x -3))
-                             (aref w (- i 16))
-                             (logxor (rotr y 17 32) (rotr y 19 32) (ash y -10))
-                             (aref w (- i 7))))))
-    (loop for i below 64
-          do (let* ((a (aref v 0)) (b (aref v 1)) (c (aref v 2)) (d (aref v 3))
-                    (e (aref v 4)) (f (aref v 5)) (g (aref v 6)) (hh (aref v 7))
-                    (s1 (logxor (rotr e 6 32) (rotr e 11 32) (rotr e 25 32)))
-                    (ch (logxor (logand e f) (logand (lognot e) g)))
-                    (t1 (addmod 32 hh s1 ch (aref +sha256-k+ i) (aref w i)))
-                    (s0 (logxor (rotr a 2 32) (rotr a 13 32) (rotr a 22 32)))
+(defun sha256-compress-source (h source start w)
+  (declare (type (simple-array (unsigned-byte 32) (*)) h)
+           (type octets source)
+           (type fixnum start)
+           (type (simple-array (unsigned-byte 32) (64)) w)
+           (optimize (speed 3) (safety 1) (debug 0)))
+  (loop for i of-type fixnum from 0 below 16
+        do (setf (aref w i)
+                 (logior (ash (aref source (+ start (* i 4))) 24)
+                         (ash (aref source (+ start (* i 4) 1)) 16)
+                         (ash (aref source (+ start (* i 4) 2)) 8)
+                         (aref source (+ start (* i 4) 3)))))
+  (loop for i of-type fixnum from 16 below 64
+        do (let* ((w15 (aref w (- i 15))) (w2 (aref w (- i 2)))
+                  (s0 (logxor (rotr32 w15 7) (rotr32 w15 18) (ash w15 -3)))
+                  (s1 (logxor (rotr32 w2 17) (rotr32 w2 19) (ash w2 -10))))
+             (declare (type (unsigned-byte 32) w15 w2 s0 s1))
+             (setf (aref w i)
+                   (addmod 32 (aref w (- i 16)) s0 (aref w (- i 7)) s1))))
+  (let ((a (aref h 0)) (b (aref h 1)) (c (aref h 2)) (d (aref h 3))
+        (e (aref h 4)) (f (aref h 5)) (g (aref h 6)) (hh (aref h 7)))
+    (declare (type (unsigned-byte 32) a b c d e f g hh))
+    (loop for i of-type fixnum from 0 below 64
+          do (let* ((s1 (logxor (rotr32 e 6) (rotr32 e 11) (rotr32 e 25)))
+                    (ch (logxor (logand e f) (logand (logxor e #xffffffff) g)))
+                    (temp1 (addmod 32 hh s1 ch (aref +sha256-k+ i) (aref w i)))
+                    (s0 (logxor (rotr32 a 2) (rotr32 a 13) (rotr32 a 22)))
                     (maj (logxor (logand a b) (logand a c) (logand b c)))
-                    (t2 (addmod 32 s0 maj)))
-               (let ((new-a (addmod 32 t1 t2))
-                     (new-e (addmod 32 d t1)))
-                 (setf (aref v 0) new-a (aref v 1) a (aref v 2) b (aref v 3) c
-                       (aref v 4) new-e (aref v 5) e (aref v 6) f (aref v 7) g))))
-    (loop for i below 8 for value across v
-          do (setf (aref h i) (addmod 32 (aref h i) value))
-          finally (return h))))
+                    (temp2 (addmod 32 s0 maj)))
+               (declare (type (unsigned-byte 32) s1 ch temp1 s0 maj temp2))
+               (setf hh g g f f e e (addmod 32 d temp1)
+                     d c c b b a a (addmod 32 temp1 temp2))))
+    (setf (aref h 0) (addmod 32 (aref h 0) a)
+          (aref h 1) (addmod 32 (aref h 1) b)
+          (aref h 2) (addmod 32 (aref h 2) c)
+          (aref h 3) (addmod 32 (aref h 3) d)
+          (aref h 4) (addmod 32 (aref h 4) e)
+          (aref h 5) (addmod 32 (aref h 5) f)
+          (aref h 6) (addmod 32 (aref h 6) g)
+          (aref h 7) (addmod 32 (aref h 7) hh)))
+  h)
+(defun sha256-compress (h block)
+  (let ((w (make-array 64 :element-type '(unsigned-byte 32))))
+    (declare (type (simple-array (unsigned-byte 32) (64)) w)
+             (dynamic-extent w))
+    (sha256-compress-source h block 0 w)))
 
 (defun sha512-compress (h block)
   (let ((w (make-array 80 :element-type '(unsigned-byte 64) :initial-element 0))
@@ -280,8 +342,71 @@
                                                (ldb (byte 8 16) value)
                                                (ldb (byte 8 24) value)))
                              (put-be value (/ word-bits 8))))))))
+(defun ensure-octets (sequence)
+  (if (typep sequence 'octets)
+      sequence
+      (map '(vector (unsigned-byte 8)) #'identity sequence)))
+(defun words-to-octets (words word-bytes)
+  (let ((octets (make-array (* (length words) word-bytes)
+                            :element-type '(unsigned-byte 8))))
+    (loop for word across words
+          for word-index of-type fixnum from 0
+          do (loop for byte-index of-type fixnum from 0 below word-bytes
+                   do (setf (aref octets (+ (* word-index word-bytes) byte-index))
+                            (ldb (byte 8 (* 8 (- word-bytes byte-index 1))) word))))
+    octets))
+(defun fips-padding-tail (bytes)
+  (declare (type octets bytes))
+  (let* ((length (length bytes))
+         (bit-length (* 8 length))
+         (remainder (mod length 64))
+         (tail-start (- length remainder))
+         (tail-length (if (< remainder 56) 64 128))
+         (tail (make-array tail-length :element-type '(unsigned-byte 8)
+                           :initial-element 0)))
+    (declare (type fixnum length remainder tail-start tail-length)
+             (type octets tail))
+    (replace tail bytes :start2 tail-start :end2 length)
+    (setf (aref tail remainder) #x80)
+    (loop for index of-type fixnum from 0 below 8
+          do (setf (aref tail (- tail-length 1 index))
+                   (ldb (byte 8 (* 8 index)) bit-length)))
+    (values tail tail-start)))
+(defun sha1-digest (input)
+  (let* ((bytes (ensure-octets input))
+         (h (initial-state :sha1))
+         (w (make-array 80 :element-type '(unsigned-byte 32))))
+    (declare (type octets bytes)
+             (type (simple-array (unsigned-byte 32) (*)) h)
+             (type (simple-array (unsigned-byte 32) (80)) w))
+    (multiple-value-bind (tail tail-start) (fips-padding-tail bytes)
+      (declare (type octets tail) (type fixnum tail-start))
+      (loop for offset of-type fixnum from 0 below tail-start by 64
+            do (sha1-compress-source h bytes offset w))
+      (loop for offset of-type fixnum from 0 below (length tail) by 64
+            do (sha1-compress-source h tail offset w)))
+    (words-to-octets h 4)))
+(defun sha256-digest (input)
+  (let* ((bytes (ensure-octets input))
+         (h (initial-state :sha256))
+         (w (make-array 64 :element-type '(unsigned-byte 32))))
+    (declare (type octets bytes)
+             (type (simple-array (unsigned-byte 32) (*)) h)
+             (type (simple-array (unsigned-byte 32) (64)) w))
+    (multiple-value-bind (tail tail-start) (fips-padding-tail bytes)
+      (declare (type octets tail) (type fixnum tail-start))
+      (loop for offset of-type fixnum from 0 below tail-start by 64
+            do (sha256-compress-source h bytes offset w))
+      (loop for offset of-type fixnum from 0 below (length tail) by 64
+            do (sha256-compress-source h tail offset w)))
+    (words-to-octets h 4)))
 (defun digest (algorithm octets)
-  (digest-final (digest-update (make-digest algorithm) octets)))
+  (case algorithm
+    #+sbcl (:md5 (sb-md5:md5sum-sequence (ensure-octets octets)))
+    (:sha1 (sha1-digest octets))
+    (:sha256 (sha256-digest octets))
+    (otherwise (digest-final (digest-update (make-digest algorithm) octets))))
+  )
 (defun octets-to-hex (octets)
   (let ((digits "0123456789abcdef")
         (hex (make-string (* 2 (length octets)))))

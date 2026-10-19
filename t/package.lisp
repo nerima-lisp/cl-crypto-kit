@@ -1,7 +1,8 @@
 (defpackage #:crypto-kit/test
   (:use #:cl #:crypto-kit)
   (:shadowing-import-from #:cl-weave #:describe)
-  (:import-from #:cl-weave #:expect #:it #:run-all #:signals)
+  (:import-from #:cl-weave #:expect #:it #:it-property #:gen-vector #:gen-integer
+                #:run-all #:signals)
   (:export #:run-tests))
 (in-package #:crypto-kit/test)
 (defun hex (string)

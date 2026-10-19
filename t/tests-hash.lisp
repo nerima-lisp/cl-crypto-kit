@@ -84,3 +84,58 @@
     (expect (constant-time-equal #(1) #(1 0)) :to-be nil))
   (it "returns secure octets of the requested length"
     (expect (length (random-octets 32)) :to-equal 32)))
+(describe "digest boundaries and streaming properties"
+  (it "matches MD5, SHA-1, and SHA-256 at padding and block boundaries"
+    (labels ((pattern-octets (length)
+               (let ((input (make-array length :element-type '(unsigned-byte 8))))
+                 (loop for index from 0 below length
+                       do (setf (aref input index) (logand index #xff)))
+                 input)))
+      (dolist (vector
+               '((0
+                  "d41d8cd98f00b204e9800998ecf8427e"
+                  "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+                  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                 (55
+                  "6912ee65fff2d9f9ce2508cddf8bcda0"
+                  "8ae2d46729cfe68ff927af5eec9c7d1b66d65ac2"
+                  "463eb28e72f82e0a96c0a4cc53690c571281131f672aa229e0d45ae59b598b59")
+                 (56
+                  "51fdd1acda72405dfdfa03fcb85896d7"
+                  "636e2ec698dac903498e648bd2f3af641d3c88cb"
+                  "da2ae4d6b36748f2a318f23e7ab1dfdf45acdc9d049bd80e59de82a60895f562")
+                 (63
+                  "48a6295221902e8e0938f773a7185e72"
+                  "6d942da0c4392b123528f2905c713a3ce28364bd"
+                  "29af2686fd53374a36b0846694cc342177e428d1647515f078784d69cdb9e488")
+                 (64
+                  "b2d3f56bc197fd985d5965079b5e7148"
+                  "c6138d514ffa2135bfce0ed0b8fac65669917ec7"
+                  "fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108")
+                 (65
+                  "8bd7053801c768420faf816fadba971c"
+                  "69bd728ad6e13cd76ff19751fde427b00e395746"
+                  "4bfd2c8b6f1eec7a2afeb48b934ee4b2694182027e6d0fc075074f2fabb31781")
+                 (128
+                  "37eff01866ba3f538421b30b7cbefcac"
+                  "e6434bc401f98603d7eda504790c98c67385d535"
+                  "471fb943aa23c511f6f72f8d1652d9c880cfa392ad80503120547703e56a2be5")
+                 (16777216
+                  "e06888832b83d4f381e885edebd1d782"
+                  "b2c3166c5c8f4558f82d6ab565e6640d9fbf39ba"
+                  "341aacac661ccb210720bedaa9ead5d668fe5ea41a73532fc147c71e34040df1")))
+        (let ((input (pattern-octets (first vector))))
+          (expect (digest-hex :md5 input) :to-equal (second vector))
+          (expect (digest-hex :sha1 input) :to-equal (third vector))
+          (expect (digest-hex :sha256 input) :to-equal (fourth vector))))))
+  (it-property "split updates match one-shot digests"
+      ((input (gen-vector (gen-integer :min 0 :max 255)
+                          :min-length 0 :max-length 512))
+       (chunk-size (gen-integer :min 1 :max 64)))
+    (dolist (algorithm '(:md5 :sha1 :sha256))
+      (let ((state (make-digest algorithm)))
+        (loop for start from 0 below (length input) by chunk-size
+              do (digest-update state input :start start
+                                :end (min (length input) (+ start chunk-size))))
+        (expect (digest-final state) :to-equalp (digest algorithm input)))))
+)
