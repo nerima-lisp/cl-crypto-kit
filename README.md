@@ -47,19 +47,51 @@ nix run .#test
   `chacha20-keystream`.
 - Key exchange: `x25519`, `x25519-base`, `p256-generate-keypair`, and
   `p256-ecdh`.
-- Signature verification: `verify-signature` for ECDSA P-256/P-384, RSA
-  PKCS#1 v1.5/PSS, and Ed25519, with `make-ec-public-key`,
-  `make-rsa-public-key`, and `make-ed25519-public-key`.
+- Signature creation: `(make-ec-private-key :p256 scalar-octets)` accepts a
+  32-byte scalar from one through the P-256 order minus one;
+  `(make-ed25519-private-key seed)` accepts a 32-byte seed.
+  Both constructors copy their input; their key objects redact private bytes
+  when printed.
+  `(private-key-public-key key)` derives the corresponding public key.
+  `(sign-message scheme key message)` supports `:ecdsa-p256-sha256` and
+  `:ed25519`, returning DER signature octets for ECDSA and a 64-byte signature
+  for Ed25519. Invalid keys, unsupported schemes, and non-octet messages signal
+  `crypto-error`.
+- Signature verification: `(verify-signature scheme public-key message signature)`
+  supports `:ecdsa-p256-sha256`, `:ecdsa-p384-sha384`,
+  `:rsa-pkcs1-sha256`, `:rsa-pkcs1-sha384`, `:rsa-pkcs1-sha512`,
+  `:rsa-pss-rsae-sha256`, `:rsa-pss-rsae-sha384`, `:rsa-pss-rsae-sha512`,
+  and `:ed25519`. P-384 and RSA are verification-only in this API. Create
+  wrappers with `(make-ec-public-key curve point)` using `:p256` or `:p384`
+  and uncompressed SEC1 point octets (65 or 97 bytes),
+  `(make-rsa-public-key modulus exponent)` using integer parameters, or
+  `(make-ed25519-public-key octets)` using a 32-byte encoded key. ECDSA
+  signatures use DER, RSA signatures use modulus-sized octets, and Ed25519
+  signatures use 64 octets. The wrapper constructors do not validate their
+  arguments. Verification returns `t` for valid signatures and `nil` for
+  invalid signatures or EC/Ed25519 octet encodings; invalid RSA modulus or
+  exponent values, unsupported schemes, and wrong key wrapper types signal
+  `crypto-error`.
 - Entropy: `random-octets`, backed by `/dev/urandom`.
 
 ## Constant-time scope
 
 X25519, AES, ChaCha20, Poly1305, GHASH, and authentication-tag comparison use
 fixed-width operations and avoid secret-dependent branches and table lookups.
-This is a source-level property, not a claim about all compiler or hardware
-behavior. Ed25519 is exposed for verification only. RSA and ECDSA signature
-verification operate on public inputs and use bignum arithmetic, so they are
-not constant-time.
+`constant-time-equal` checks every position up to the longer input length; input
+lengths are public. P-256 ECDSA signing uses fixed-length loops for accepted
+nonce and private-scalar arithmetic ([P-256 implementation](src/p256.lisp),
+[ECDSA signer](src/ecdsa.lisp)). Ed25519 scalar operations use fixed-length
+loops and masks to select results ([Ed25519 implementation](src/ed25519.lisp)).
+RFC 6979 retries if its HMAC candidate is
+zero or at least the P-256 group order, which occurs about once in 2^32 draws.
+The retry count can vary, but under HMAC's PRF model it is independent of the
+accepted nonce. If a candidate has r=0 or s=0 (about 2^-256 per draw), signing
+retries after fixed-flow arithmetic; this can add latency but reveals only that
+the discarded candidate was invalid, not the final k or d. DER encoding branches
+only on accepted public r and s. These are source-level observations, not
+guarantees about compiled code or SBCL timing. RSA and ECDSA verification use
+public inputs and bignum arithmetic.
 
 ## Verification
 

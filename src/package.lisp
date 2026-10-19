@@ -10,8 +10,10 @@
            #:chacha20-block #:chacha20-keystream #:aead-seal #:aead-open
            #:p256-ecdh #:p384-point-on-curve-p #:ecdsa-verify
            #:ecdsa-verify-p256 #:ecdsa-verify-p384
-           #:p256-generate-keypair #:verify-signature
+           #:p256-generate-keypair #:verify-signature #:sign-message
            #:make-rsa-public-key #:make-ec-public-key #:make-ed25519-public-key
+           #:make-ec-private-key #:make-ed25519-private-key
+           #:private-key-public-key
            #:aead-authentication-failure #:crypto-error
            #:crypto-error-message #:csprng-error
            #:csprng-error-message #:x25519 #:x25519-base #:ed25519-verify))

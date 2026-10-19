@@ -19,12 +19,9 @@
     (unless scalar
       (error 'csprng-error
              :message "Could not sample a P-256 private scalar"))
-    (values (ec-int-octets scalar 32)
-            (ec-encode-point (ec-mul scalar
-                                      (ec-point (ec-curve-gx +p256+)
-                                                (ec-curve-gy +p256+))
-                                      +p256+ :fixed 256)
-                              +p256+))))
+    (let ((private-octets (ec-int-octets scalar 32)))
+      (values private-octets
+              (%ec-public-from-scalar +p256+ private-octets)))))
 
 (defun %public-key-value (key type)
   (if (typep key type) key (error 'crypto-error :message "Invalid public key")))
@@ -59,3 +56,62 @@
      (let ((key (%public-key-value public-key 'ed25519-public-key)))
        (ed25519-verify signature message (ed25519-public-key-octets key))))
     (otherwise (error 'crypto-error :message "Unsupported signature scheme"))))
+(defclass ec-private-key ()
+  ((scalar :initarg :scalar :reader %ec-private-key-scalar)))
+
+(defclass ed25519-private-key ()
+  ((seed :initarg :seed :reader %ed25519-private-key-seed)))
+
+(defmethod print-object ((key ec-private-key) stream)
+  (print-unreadable-object (key stream :type t)
+    (write-string "[REDACTED]" stream)))
+
+(defmethod print-object ((key ed25519-private-key) stream)
+  (print-unreadable-object (key stream :type t)
+    (write-string "[REDACTED]" stream)))
+
+(defun make-ec-private-key (curve scalar-octets)
+  (unless (member curve '(:p256 p256))
+    (error 'crypto-error :message "Only P-256 private keys are supported"))
+  (multiple-value-bind (safe-scalar valid)
+      (%ec-private-scalar scalar-octets +p256+)
+    (declare (ignore safe-scalar))
+    (unless (= valid 1)
+      (error 'crypto-error :message "Invalid P-256 private scalar"))
+    (make-instance 'ec-private-key :scalar (copy-seq scalar-octets))))
+
+(defun make-ed25519-private-key (seed)
+  (unless (and (typep seed '(vector (unsigned-byte 8)))
+               (= (length seed) 32))
+    (error 'crypto-error :message "Ed25519 seed must contain 32 octets"))
+  (make-instance 'ed25519-private-key :seed (copy-seq seed)))
+
+(defgeneric private-key-public-key (private-key))
+
+(defmethod private-key-public-key ((private-key ec-private-key))
+  (make-ec-public-key
+   :p256
+   (%ec-public-from-scalar +p256+ (%ec-private-key-scalar private-key))))
+
+(defmethod private-key-public-key ((private-key ed25519-private-key))
+  (make-ed25519-public-key
+   (ed25519-public-key-from-seed (%ed25519-private-key-seed private-key))))
+
+(defmethod private-key-public-key ((private-key t))
+  (declare (ignore private-key))
+  (error 'crypto-error :message "Unsupported private key type"))
+
+(defun sign-message (scheme private-key message)
+  (case scheme
+    (:ecdsa-p256-sha256
+     (unless (typep private-key 'ec-private-key)
+       (error 'crypto-error :message
+              "ECDSA P-256 requires a P-256 private key"))
+     (ecdsa-sign-p256 message (%ec-private-key-scalar private-key)))
+    (:ed25519
+     (unless (typep private-key 'ed25519-private-key)
+       (error 'crypto-error :message
+              "Ed25519 requires an Ed25519 private key"))
+     (ed25519-sign (%ed25519-private-key-seed private-key) message))
+    (otherwise
+     (error 'crypto-error :message "Unsupported signature scheme"))))

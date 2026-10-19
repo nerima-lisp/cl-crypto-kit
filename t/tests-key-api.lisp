@@ -1,0 +1,56 @@
+(in-package #:crypto-kit/test)
+
+(defun %check-key-api (condition message)
+  (unless condition (error "~A" message)))
+
+(defun %redacted-key-p (key)
+  (search "[redacted]" (string-downcase (write-to-string key))))
+
+(defun run-key-api-tests ()
+  (let ((message (ascii "signing api test")))
+    (multiple-value-bind (private-octets public-octets) (p256-generate-keypair)
+      (let ((private-key (make-ec-private-key :p256 private-octets)))
+        (fill private-octets 0)
+        (let* ((public-key (private-key-public-key private-key))
+               (signature (sign-message :ecdsa-p256-sha256 private-key message)))
+          (%check-key-api (equalp (crypto-kit::ec-public-key-point public-key)
+                                  public-octets)
+                          "P-256 private key was not copied or derived correctly")
+          (%check-key-api (verify-signature :ecdsa-p256-sha256 public-key
+                                            message signature)
+                          "P-256 API signature did not verify")
+          (%check-key-api (%redacted-key-p private-key)
+                          "P-256 private key printer did not redact its contents"))))
+    (let* ((seed (hex "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"))
+           (private-key (make-ed25519-private-key seed)))
+      (fill seed 0)
+      (let* ((public-key (private-key-public-key private-key))
+             (signature (sign-message :ed25519 private-key message)))
+        (%check-key-api (verify-signature :ed25519 public-key message signature)
+                        "Ed25519 API signature did not verify")
+        (%check-key-api (%redacted-key-p private-key)
+                        "Ed25519 private key printer did not redact its contents")))
+    (let ((zero (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0)))
+      (%check-key-api
+       (handler-case (progn (make-ec-private-key :p256 zero) nil)
+         (crypto-error () t))
+       "P-256 constructor accepted the zero scalar")
+      (%check-key-api
+       (handler-case (progn (make-ed25519-private-key #(0)) nil)
+         (crypto-error () t))
+       "Ed25519 constructor accepted a short seed"))
+    (let ((one (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0)))
+      (setf (aref one 31) 1)
+      (%check-key-api
+       (handler-case
+           (progn (sign-message :ed25519
+                                (make-ec-private-key :p256 one) message)
+                  nil)
+         (crypto-error () t))
+       "Ed25519 signer accepted a P-256 private key"))
+    (%check-key-api
+     (handler-case (progn (sign-message :rsa-pss-rsae-sha256 nil message) nil)
+       (crypto-error () t))
+     "Signer accepted an unsupported scheme"))
+  (format t "Signing API tests passed~%")
+  t)

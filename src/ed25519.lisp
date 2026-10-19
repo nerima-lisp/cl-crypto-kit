@@ -150,3 +150,214 @@
       ;; torsion and is the RFC 8032-compatible strict verification equation.
       (ed25519-point-equal (ed25519-scalarmult left 8)
                            (ed25519-scalarmult right 8)))))
+
+(defvar *ed25519-field-context* nil)
+(defvar *ed25519-order-context* nil)
+
+(defun %ed25519-field-context ()
+  (or *ed25519-field-context*
+      (setf *ed25519-field-context*
+            (%ec-montgomery-context +ed25519-p+ 32))))
+
+(defun %ed25519-order-context ()
+  (or *ed25519-order-context*
+      (setf *ed25519-order-context*
+            (%ec-montgomery-context +ed25519-l+ 32))))
+
+(defun %ed25519-limbs-from-little-endian (octets limb-count)
+  (let ((limbs (make-array limb-count :initial-element 0)))
+    (loop for bit-index below (* 8 (length octets)) do
+      (let* ((byte-index (floor bit-index 8))
+             (byte-bit (mod bit-index 8))
+             (limb-index (floor bit-index +ec-limb-bits+))
+             (limb-bit (mod bit-index +ec-limb-bits+))
+             (bit (ldb (byte 1 byte-bit) (aref octets byte-index))))
+        (setf (aref limbs limb-index)
+              (logior (aref limbs limb-index)
+                      (ash bit limb-bit)))))
+    limbs))
+
+(defun %ed25519-limbs-to-little-endian (limbs size)
+  (let ((octets (make-array size :element-type '(unsigned-byte 8)
+                            :initial-element 0)))
+    (loop for bit-index below (* 8 size) do
+      (let* ((limb-index (floor bit-index +ec-limb-bits+))
+             (limb-bit (mod bit-index +ec-limb-bits+))
+             (octet-index (floor bit-index 8))
+             (octet-bit (mod bit-index 8))
+             (bit (ldb (byte 1 limb-bit) (aref limbs limb-index))))
+        (setf (aref octets octet-index)
+              (logior (aref octets octet-index)
+                      (ash bit octet-bit)))))
+    octets))
+
+(defun %ed25519-scalar-reduce-octets (octets)
+  (let* ((context (%ed25519-order-context))
+         (limb-count (ec-mod-context-limb-count context))
+         (modulus (ec-mod-context-modulus-limbs context))
+         (zero (make-array limb-count :initial-element 0))
+         (one (make-array limb-count :initial-element 0))
+         (remainder zero))
+    (setf (aref one 0) 1)
+    (loop for bit-index downfrom (1- (* 8 (length octets))) to 0
+          for byte-index = (floor bit-index 8)
+          for byte-bit = (mod bit-index 8)
+          for input-bit = (ldb (byte 1 byte-bit)
+                               (aref octets byte-index))
+          do (multiple-value-bind (doubled double-carry)
+                 (%ec-limbs-add-raw remainder remainder)
+               (declare (ignore double-carry))
+               (let ((increment (%ec-limbs-select zero one input-bit)))
+                 (multiple-value-bind (candidate add-carry)
+                     (%ec-limbs-add-raw doubled increment)
+                   (declare (ignore add-carry))
+                   (multiple-value-bind (difference borrow)
+                       (%ec-limbs-sub-raw candidate modulus)
+                     (setf remainder
+                           (%ec-limbs-select difference candidate borrow)))))))
+    remainder))
+
+(defun %ed25519-field-from-public-integer (value context)
+  (%ec-to-montgomery
+   (%ec-limbs-from-public-integer
+    value (ec-mod-context-limb-count context))
+   context))
+
+(defun %ed25519-secret-base (context)
+  (let* ((x (%ed25519-field-from-public-integer +ed25519-base-x+ context))
+         (y (%ed25519-field-from-public-integer +ed25519-base-y+ context))
+         (one (ec-mod-context-montgomery-one context)))
+    (vector x y one (%ec-montgomery-multiply x y context))))
+
+(defun %ed25519-secret-identity (context)
+  (let ((zero (make-array (ec-mod-context-limb-count context)
+                          :initial-element 0))
+        (one (ec-mod-context-montgomery-one context)))
+    (vector zero one one zero)))
+
+(defun %ed25519-secret-point-select (left right bit)
+  (vector (%ec-limbs-select (aref right 0) (aref left 0) bit)
+          (%ec-limbs-select (aref right 1) (aref left 1) bit)
+          (%ec-limbs-select (aref right 2) (aref left 2) bit)
+          (%ec-limbs-select (aref right 3) (aref left 3) bit)))
+
+(defun %ed25519-secret-point-add (left right context two-d)
+  (let* ((x1 (aref left 0))
+         (y1 (aref left 1))
+         (z1 (aref left 2))
+         (t1 (aref left 3))
+         (x2 (aref right 0))
+         (y2 (aref right 1))
+         (z2 (aref right 2))
+         (t2 (aref right 3))
+         (a (%ec-montgomery-multiply
+             (%ec-modular-subtract y1 x1 context)
+             (%ec-modular-subtract y2 x2 context) context))
+         (b (%ec-montgomery-multiply
+             (%ec-modular-add y1 x1 context)
+             (%ec-modular-add y2 x2 context) context))
+         (c (%ec-montgomery-multiply
+             (%ec-montgomery-multiply two-d t1 context) t2 context))
+         (z-product (%ec-montgomery-multiply z1 z2 context))
+         (d (%ec-modular-add z-product z-product context))
+         (e (%ec-modular-subtract b a context))
+         (f (%ec-modular-subtract d c context))
+         (g (%ec-modular-add d c context))
+         (h (%ec-modular-add b a context)))
+    (vector (%ec-montgomery-multiply e f context)
+            (%ec-montgomery-multiply g h context)
+            (%ec-montgomery-multiply f g context)
+            (%ec-montgomery-multiply e h context))))
+
+(defun %ed25519-secret-scalarmult (point scalar context two-d)
+  (let ((r0 (%ed25519-secret-identity context))
+        (r1 point))
+    (loop for bit-index from 255 downto 0
+          for bit = (%ec-limbs-bit scalar bit-index)
+          do (let* ((swap (%ed25519-secret-point-select r0 r1 bit))
+                    (keep (%ed25519-secret-point-select r1 r0 bit))
+                    (doubled (%ed25519-secret-point-add keep keep context two-d))
+                    (sum (%ed25519-secret-point-add keep swap context two-d)))
+               (setf r0 (%ed25519-secret-point-select sum doubled bit)
+                     r1 (%ed25519-secret-point-select doubled sum bit))))
+    r0))
+
+(defun %ed25519-field-inverse (value context)
+  (let ((exponent (%ec-limbs-from-public-integer
+                   (- +ed25519-p+ 2)
+                   (ec-mod-context-limb-count context))))
+    (%ec-montgomery-power value exponent context 255)))
+
+(defun %ed25519-secret-encode (point context)
+  (let* ((z-inverse (%ed25519-field-inverse (aref point 2) context))
+         (x (%ec-montgomery-multiply (aref point 0) z-inverse context))
+         (y (%ec-montgomery-multiply (aref point 1) z-inverse context))
+         (normal-x (%ec-from-montgomery x context))
+         (normal-y (%ec-from-montgomery y context))
+         (encoding (%ed25519-limbs-to-little-endian normal-y 32)))
+    (setf (aref encoding 31)
+          (logior (aref encoding 31)
+                  (ash (%ec-limbs-bit normal-x 0) 7)))
+    encoding))
+
+(defun %ed25519-secret-hash-scalar (&rest octets)
+  (%ed25519-scalar-reduce-octets
+   (%sha512-fixed (apply #'concat-octets octets))))
+
+(defun %ed25519-secret-scalar-mul-add (r challenge scalar)
+  (let* ((context (%ed25519-order-context))
+         (r-mont (%ec-to-montgomery r context))
+         (challenge-mont (%ec-to-montgomery challenge context))
+         (scalar-mont (%ec-to-montgomery scalar context))
+         (product (%ec-montgomery-multiply challenge-mont scalar-mont context))
+         (sum (%ec-modular-add product r-mont context)))
+    (%ec-from-montgomery sum context)))
+
+(defun ed25519-seed-material (seed)
+  (unless (and (vectorp seed)
+               (typep seed '(array (unsigned-byte 8) (*)))
+               (= (length seed) 32))
+    (crypto-error "Ed25519 seed must be a 32-octet vector"))
+  (let ((expanded (%sha512-fixed seed)))
+    (setf (aref expanded 0) (logand (aref expanded 0) #xf8)
+          (aref expanded 31)
+          (logior (logand (aref expanded 31) #x3f) #x40))
+    (values expanded
+            (%ed25519-limbs-from-little-endian
+             (subseq expanded 0 32)
+             (ec-mod-context-limb-count (%ed25519-order-context))))))
+
+(defun ed25519-public-key-from-seed (seed)
+  (multiple-value-bind (expanded scalar) (ed25519-seed-material seed)
+    (declare (ignore expanded))
+    (let* ((context (%ed25519-field-context))
+           (two-d (%ed25519-field-from-public-integer
+                   +ed25519-two-d+ context))
+           (point (%ed25519-secret-scalarmult
+                   (%ed25519-secret-base context) scalar context two-d)))
+      (%ed25519-secret-encode point context))))
+
+(defun ed25519-sign (seed message)
+  (multiple-value-bind (expanded scalar) (ed25519-seed-material seed)
+    (let* ((prefix (subseq expanded 32 64))
+           (field-context (%ed25519-field-context))
+           (two-d (%ed25519-field-from-public-integer
+                   +ed25519-two-d+ field-context))
+           (base (%ed25519-secret-base field-context))
+           (public-key
+             (%ed25519-secret-encode
+              (%ed25519-secret-scalarmult
+               base scalar field-context two-d)
+              field-context))
+           (r (%ed25519-secret-hash-scalar prefix message))
+           (r-encoding
+             (%ed25519-secret-encode
+              (%ed25519-secret-scalarmult
+               base r field-context two-d)
+              field-context))
+           (challenge
+             (%ed25519-secret-hash-scalar
+              r-encoding public-key message))
+           (s (%ed25519-secret-scalar-mul-add r challenge scalar)))
+      (concat-octets r-encoding
+                     (%ed25519-limbs-to-little-endian s 32)))))
