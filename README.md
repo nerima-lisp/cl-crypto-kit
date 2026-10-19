@@ -1,7 +1,8 @@
 # cl-crypto-kit
 
-Pure Common Lisp cryptographic primitives for SBCL. The verified target is
-Linux x86_64. Public octet data uses `(simple-array (unsigned-byte 8) (*))`.
+Pure Common Lisp cryptographic primitives for SBCL. The supported targets are
+macOS aarch64 and Linux x86_64. Public octet data uses
+`(simple-array (unsigned-byte 8) (*))`.
 
 ## Getting started
 
@@ -64,14 +65,27 @@ not constant-time.
 
 The ASDF test suite runs NIST, RFC, and Wycheproof vectors, including
 tampering-rejection cases. `nix flake check --all-systems` runs that suite and
-the OpenSSL hash comparison. The flake declares only the Linux x86_64 target.
-Performance is hardware- and SBCL-dependent; this project does not publish a
-stable benchmark number. Measure a target deployment with the provided
-implementation and workload.
+the OpenSSL hash comparison on macOS aarch64 and Linux x86_64.
 
 ```sh
 nix flake check --all-systems
 ```
+
+## Digest benchmark
+
+Run the reproducible 16 MiB comparison against the current Aitools digest source
+with:
+
+```sh
+sbcl --noinform --script scripts/benchmark-digest.lisp /path/to/aitools/digest.lisp
+```
+
+The benchmark uses a deterministic xorshift32 input seeded with `0x6d2b79f5`,
+two warmups per implementation, two reference/reference noise pairs, and seven
+alternating implementation pairs. It forces a full GC before every sample and
+reports medians, paired wins, and the median absolute reference/reference
+difference. On SBCL, one-shot MD5 uses SBCL's bundled `sb-md5`; other
+implementations retain the Common Lisp MD5 path.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] - 2026-10-19
+
+- Optimized one-shot MD5, SHA-1, and SHA-256 digest processing while preserving streaming APIs.
+- Added padding-boundary, multi-block, 16 MiB, and split-update property coverage.
+- Added a reproducible 16 MiB digest comparison benchmark.
+- Added the macOS aarch64 Nix target.
+
 ## [0.1.0] - 2026-10-17
 
 - Added `digest-hex` for lowercase hexadecimal digests and `octets-to-hex` for converting octets to lowercase hexadecimal.
