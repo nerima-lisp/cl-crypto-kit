@@ -337,7 +337,9 @@
                    (%ed25519-secret-base context) scalar context two-d)))
       (%ed25519-secret-encode point context))))
 
-(defun ed25519-sign (seed message)
+(defun ed25519-sign (seed message &optional cached-public-key)
+  (unless (typep message '(vector (unsigned-byte 8)))
+    (crypto-error "Ed25519 message must be an octet vector"))
   (multiple-value-bind (expanded scalar) (ed25519-seed-material seed)
     (let* ((prefix (subseq expanded 32 64))
            (field-context (%ed25519-field-context))
@@ -345,10 +347,11 @@
                    +ed25519-two-d+ field-context))
            (base (%ed25519-secret-base field-context))
            (public-key
-             (%ed25519-secret-encode
-              (%ed25519-secret-scalarmult
-               base scalar field-context two-d)
-              field-context))
+             (or cached-public-key
+                 (%ed25519-secret-encode
+                  (%ed25519-secret-scalarmult
+                   base scalar field-context two-d)
+                  field-context)))
            (r (%ed25519-secret-hash-scalar prefix message))
            (r-encoding
              (%ed25519-secret-encode

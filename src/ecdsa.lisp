@@ -52,7 +52,16 @@
 (defun ec-curve-for (curve) (case curve ((:p256 p256) +p256+) ((:p384 p384) +p384+) (otherwise (crypto-error "Unknown EC curve ~S" curve))))
 (defun ecdsa-verify-p256 (message public-key signature) (ecdsa-verify :p256 :sha256 message public-key signature))
 (defun ecdsa-verify-p384 (message public-key signature) (ecdsa-verify :p384 :sha384 message public-key signature))
-(defun %rfc6979-p256-k-generator (private-scalar hash-bytes)
+(defun %rfc6979-p256-next-valid-candidate
+    (candidate-function reject-function context)
+  (loop for candidate = (funcall candidate-function)
+        when (= (%ec-limbs-valid-scalar-bit candidate context) 1)
+          return candidate
+        do (funcall reject-function)))
+(defun %rfc6979-p256-k-generator
+    (private-scalar hash-bytes
+     &optional (hmac-function
+                (lambda (key data) (hmac :sha256 key data))))
   (let* ((size (ec-curve-size +p256+))
          (context (%ec-order-context +p256+))
          (limb-count (ec-mod-context-limb-count context))
@@ -71,25 +80,29 @@
                (%ec-limbs-to-octets
                 (%ec-limbs-select reduced hash-limbs borrow) size))
              (bx (concat-octets private-scalar bits2octets)))
-        (setf key (hmac :sha256 key (concat-octets value #(0) bx)))
-        (setf value (hmac :sha256 key value))
-        (setf key (hmac :sha256 key (concat-octets value #(1) bx)))
-        (setf value (hmac :sha256 key value))))
+        (setf key (funcall hmac-function key (concat-octets value #(0) bx)))
+        (setf value (funcall hmac-function key value))
+        (setf key (funcall hmac-function key (concat-octets value #(1) bx)))
+        (setf value (funcall hmac-function key value))))
     (lambda ()
       (when returned
-        (setf key (hmac :sha256 key (concat-octets value #(0))))
-        (setf value (hmac :sha256 key value))
+        (setf key (funcall hmac-function key (concat-octets value #(0))))
+        (setf value (funcall hmac-function key value))
         (setf returned nil))
-      (loop
-        (setf value (hmac :sha256 key value))
-        (let* ((candidate (%ec-limbs-from-octets value limb-count))
-               (valid (%ec-limbs-valid-scalar-bit candidate context)))
-          (when (= valid 1)
-            (setf returned t)
-            (return candidate)))
-        ;; RFC 6979's rejection count varies (~2^-32/draw), but is independent of accepted k under HMAC's PRF model.
-        (setf key (hmac :sha256 key (concat-octets value #(0))))
-        (setf value (hmac :sha256 key value))))))
+      (let ((candidate
+              (%rfc6979-p256-next-valid-candidate
+               (lambda ()
+                 (setf value (funcall hmac-function key value))
+                 (%ec-limbs-from-octets value limb-count))
+               (lambda ()
+                 ;; RFC 6979 requires this update after an out-of-range candidate.
+                 (setf key
+                       (funcall hmac-function
+                                key (concat-octets value #(0))))
+                 (setf value (funcall hmac-function key value)))
+               context)))
+        (setf returned t)
+        candidate))))
 (defun %ecdsa-p256-candidate (private-scalar nonce message-hash)
   (let* ((context (%ec-order-context +p256+))
          (limb-count (ec-mod-context-limb-count context))

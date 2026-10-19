@@ -1,6 +1,7 @@
 (in-package #:crypto-kit)
 
-(defstruct (ec-curve (:constructor make-ec-curve (prime a b gx gy n size))) prime a b gx gy n size field-context order-context field-b)
+(defstruct (ec-curve (:constructor make-ec-curve (prime a b gx gy n size))) prime a b gx gy n size field-state order-context)
+(defstruct (ec-field-state (:constructor %make-ec-field-state (context b)) (:copier nil)) context b)
 (defparameter +p256+
   (make-ec-curve #xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
                  #xffffffff00000001000000000000000000000000fffffffffffffffffffffffc
@@ -285,16 +286,28 @@
       (%make-ec-mod-context modulus limb-count modulus-limbs n0-inverse
                             r2 montgomery-one))))
 (defun %ec-field-context (curve)
-  (or (ec-curve-field-context curve)
-      (let ((context (%ec-montgomery-context (ec-curve-prime curve)
-                                             (ec-curve-size curve))))
-        (setf (ec-curve-field-context curve) context
-              (ec-curve-field-b curve)
-              (%ec-montgomery-multiply
-               (%ec-limbs-from-public-integer
-                (ec-curve-b curve) (ec-mod-context-limb-count context))
-               (ec-mod-context-r2 context) context))
-        context)))
+  (let ((state
+          (or (ec-curve-field-state curve)
+              (let* ((context (%ec-montgomery-context
+                               (ec-curve-prime curve)
+                               (ec-curve-size curve)))
+                     (field-b
+                       (%ec-montgomery-multiply
+                        (%ec-limbs-from-public-integer
+                         (ec-curve-b curve)
+                         (ec-mod-context-limb-count context))
+                        (ec-mod-context-r2 context)
+                        context)))
+                (or (ec-curve-field-state curve)
+                    (setf (ec-curve-field-state curve)
+                          (%make-ec-field-state context field-b)))))))
+    (ec-field-state-context state)))
+(defun %ec-field-b (curve)
+  (ec-field-state-b
+   (or (ec-curve-field-state curve)
+       (progn
+         (%ec-field-context curve)
+         (ec-curve-field-state curve)))))
 (defun %ec-order-context (curve)
   (or (ec-curve-order-context curve)
       (setf (ec-curve-order-context curve)
@@ -364,7 +377,7 @@
   (let* ((x1 (ec-projective-x left)) (y1 (ec-projective-y left))
          (z1 (ec-projective-z left)) (x2 (ec-projective-x right))
          (y2 (ec-projective-y right)) (z2 (ec-projective-z right))
-         (b (progn (%ec-field-context curve) (ec-curve-field-b curve)))
+         (b (%ec-field-b curve))
          (u0 0) (u1 0) (u2 0) (u3 0) (u4 0)
          (x3 0) (y3 0) (z3 0))
     (setf u0 (%ec-fmul x1 x2 curve)
@@ -408,7 +421,7 @@
 (defun ec-projective-double (point curve)
   (let* ((x (ec-projective-x point)) (y (ec-projective-y point))
          (z (ec-projective-z point))
-         (b (progn (%ec-field-context curve) (ec-curve-field-b curve)))
+         (b (%ec-field-b curve))
          (u0 0) (u1 0) (u2 0) (u3 0)
          (x3 0) (y3 0) (z3 0))
     (setf u0 (%ec-fmul x x curve)

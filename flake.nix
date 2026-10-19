@@ -61,6 +61,7 @@
               --eval '(asdf:test-system "cl-crypto-kit")' 2>&1 | tee "$test_log"
             grep -Eq 'RFC HMAC [1-9][0-9]*, RFC HKDF [1-9][0-9]* vectors passed' "$test_log"
             grep -Eq 'Wycheproof X25519 [1-9][0-9]*, Ed25519 [1-9][0-9]* vectors passed' "$test_log"
+            grep -Eq 'cl-crypto-kit: Signature checks [1-9][0-9]* passed' "$test_log"
             bash scripts/crypto-hash-openssl.sh
             touch "$out"
           '';
