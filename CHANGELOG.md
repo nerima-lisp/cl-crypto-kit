@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.0] - 2026-10-19
+
+- Added deterministic ECDSA P-256/SHA-256 signing, Ed25519 signing, and APIs to derive public keys from private keys.
+
 ## [0.1.1] - 2026-10-19
 
 - Optimized one-shot MD5, SHA-1, and SHA-256 digest processing while preserving streaming APIs.
