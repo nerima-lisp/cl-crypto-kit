@@ -12,6 +12,38 @@
   (unless (equalp actual expected)
     (error "~A: got ~S, expected ~S" label actual expected)))
 
+(defun %aes-gcm-security-regression-tests ()
+  (let* ((key (make-array 32 :element-type '(unsigned-byte 8)
+                          :initial-element 0))
+         (nonce (make-array 12 :element-type '(unsigned-byte 8)
+                            :initial-element 0))
+         (plaintext (make-array 65 :element-type '(unsigned-byte 8)
+                                :initial-element 0))
+         (aad (%aes-gcm-bytes ""))
+         (context (crypto-kit::aes-256 key))
+         (printed-context (write-to-string context))
+         (round-keys (write-to-string
+                      (crypto-kit::aes-context-round-keys context)))
+         (bitsliced-round-keys
+           (write-to-string
+            (crypto-kit::aes-context-bitsliced-round-keys context)))
+         (sealed (crypto-kit::aead-seal :aes-256-gcm key nonce plaintext aad)))
+    (%aes-gcm-check (not (null (search "[REDACTED]" printed-context))) t
+                    "AES context redaction marker")
+    (unless (and (plusp (length (crypto-kit::aes-context-round-keys context)))
+                 (plusp
+                  (length
+                   (crypto-kit::aes-context-bitsliced-round-keys context)))
+                 (not (search round-keys printed-context))
+                 (not (search bitsliced-round-keys printed-context)))
+      (error "AES context printing exposed a key schedule"))
+    (%aes-gcm-check (length sealed) 81 "AES-256 GCM four-block output length")
+    (%aes-gcm-check (crypto-kit::aead-open :aes-256-gcm key nonce sealed aad)
+                    plaintext
+                    "AES-256 GCM four-block round-trip")
+    (format t "cl-crypto-kit: AES-GCM security regression tests passed (4 checks)~%")
+    t))
+
 (defun run-aes-gcm-tests ()
   (%aes-gcm-check
    (crypto-kit::aes-encrypt-block
@@ -196,4 +228,4 @@
                     #()))
        "open zero IV")
       (format t "cl-crypto-kit: AES-GCM public API boundary tests passed (4 checks)~%")))
-  t)
+  (progn (%aes-gcm-security-regression-tests) t))

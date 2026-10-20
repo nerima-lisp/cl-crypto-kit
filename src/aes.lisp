@@ -15,6 +15,10 @@
              (:constructor %make-aes-context (round-keys rounds bitsliced-round-keys)))
   round-keys rounds bitsliced-round-keys)
 
+(defmethod print-object ((context aes-context) stream)
+  (print-unreadable-object (context stream :type t)
+    (write-string "[REDACTED]" stream)))
+
 (defun %aes-xtime (x)
   (declare (type (unsigned-byte 8) x))
   (logand #xff
@@ -308,7 +312,7 @@
       (%aes-bitslice-sbox planes)
       (%aes-ct64-shift-rows planes)
       (let ((key-index key-offset))
-        (declare (type (integer 8 112) key-index))
+        (declare (type (integer 8 120) key-index))
         (dotimes (word 8)
           (declare (type (integer 0 8) word))
           (setf (aref planes word)
