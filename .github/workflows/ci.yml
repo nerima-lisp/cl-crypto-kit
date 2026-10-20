@@ -20,7 +20,7 @@ jobs:
         run: |
           test_log="$RUNNER_TEMP/cl-crypto-kit-check.log"
           nix log ".#checks.${{ matrix.system }}.test" > "$test_log"
-          grep -E '^;|cl-crypto-kit: AES-GCM disassembly' "$test_log"
+          grep -nEi '^;|cl-crypto-kit: AES-GCM disassembly|unhandled|fatal ERROR|caught [0-9]+ fatal ERROR condition|ERROR:' "$test_log" | tail -n 120 || true
           grep -E 'cl-crypto-kit: AES-GCM disassembly assertions [1-9][0-9]* passed \((x86-64|arm64)\)' "$test_log"
           grep -E 'cl-crypto-kit: AES-GCM disassembly positive control rejected generic arithmetic' "$test_log"
           grep -E 'cl-crypto-kit: Signature checks [1-9][0-9]* passed' "$test_log"
