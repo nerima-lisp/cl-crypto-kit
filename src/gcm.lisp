@@ -26,7 +26,8 @@
     (crypto-error "AES-GCM ciphertext is too long")))
 
 (defun %gcm-xor-into (out in)
-  (dotimes (index (length in) out)
+  (declare (type (simple-array (unsigned-byte 8) (16)) out in))
+  (dotimes (index 16 out)
     (setf (aref out index) (logxor (aref out index) (aref in index)))))
 
 (defun %gcm-mul-into (out x y)
@@ -218,17 +219,14 @@
     output))
 
 (defun %gcm-constant-time-equal (left right)
-  (let ((difference (logxor (length left) (length right))))
-    (dotimes (index (max (length left) (length right))
-             (zerop difference))
+  (declare (type (simple-array (unsigned-byte 8) (16)) left right))
+  (let ((difference 0))
+    (declare (type (unsigned-byte 8) difference))
+    (dotimes (index 16 (zerop difference))
       (setf difference
             (logior difference
-                   (if (< index (length left))
-                       (logxor (aref left index)
-                               (if (< index (length right))
-                                   (aref right index) 0))
-                       (if (< index (length right))
-                           (aref right index) 0)))))))
+                    (logxor (aref left index)
+                            (aref right index)))))))
 
 (defun %gcm-authenticate (cipher nonce aad ciphertext)
   (let* ((zero (make-array 16 :element-type '(unsigned-byte 8)
