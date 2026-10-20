@@ -85,49 +85,19 @@
 (defun %gcm-disassembly-conditional-branch-p (mnemonic architecture)
   (case architecture
     (:x86-64
-     (and (>= (length mnemonic) 2)
-          (string= mnemonic "J" :end1 1)
-          (not (member mnemonic '("JMP" "JMPQ" "JMPW") :test #'string=))))
+     (or (and (>= (length mnemonic) 2)
+              (string= mnemonic "J" :end1 1)
+              (not (member mnemonic (list "JMP" "JMPQ" "JMPW")
+                           :test (function string=))))
+         (member mnemonic (list "LOOP" "LOOPE" "LOOPZ" "LOOPNE" "LOOPNZ")
+                 :test (function string=))))
     (:arm64
-     (or
-      (member mnemonic
-              '("BEQ" "BNE"
-                      "BCS"
-                      "BCC"
-                      "BHS"
-                      "BLO"
-                      "BMI"
-                      "BPL"
-                      "BVS"
-                      "BVC"
-                      "BHI"
-                      "BLS"
-                      "BGE"
-                      "BLT"
-                      "BGT"
-                      "BLE"
-                      "B.EQ"
-                      "B.NE"
-                      "B.CS"
-                      "B.CC"
-                      "B.HS"
-                      "B.LO"
-                      "B.MI"
-                      "B.PL"
-                      "B.VS"
-                      "B.VC"
-                      "B.HI"
-                      "B.LS"
-                      "B.GE"
-                      "B.LT"
-                      "B.GT"
-                      "B.LE"
-                      "CBZ"
-                      "CBNZ"
-                      "TBZ"
-                      "TBNZ")
-              :test
-              #'string=)))))
+     (member mnemonic
+             (list "BEQ" "BNE" "BCS" "BCC" "BHS" "BLO" "BMI" "BPL" "BVS" "BVC"
+                   "BHI" "BLS" "BGE" "BLT" "BGT" "BLE" "B.EQ" "B.NE" "B.CS"
+                   "B.CC" "B.HS" "B.LO" "B.MI" "B.PL" "B.VS" "B.VC" "B.HI"
+                   "B.LS" "B.GE" "B.LT" "B.GT" "B.LE" "CBZ" "CBNZ" "TBZ" "TBNZ")
+             :test (function string=)))))
 
 (defun %gcm-disassembly-call-p (record architecture)
   (let ((mnemonic (getf record :mnemonic))
@@ -185,13 +155,46 @@
 
 (defun %gcm-disassembly-loop-branch-p (mnemonic architecture)
   (case architecture
-    (:x86-64 (string= mnemonic "JL"))
+    (:x86-64 (or (string= mnemonic "JL")
+                 (string= mnemonic "JNE")))
     (:arm64 (string= mnemonic "BNE"))))
+(defun %gcm-disassembly-register-write-p (record register architecture)
+  (let* ((mnemonic (getf record :mnemonic))
+         (operands (getf record :operands))
+         (normalized-register
+          (%gcm-disassembly-normalize-register register architecture))
+         (normalized-operands
+          (mapcar (lambda (operand)
+                    (%gcm-disassembly-normalize-register operand architecture))
+                  operands)))
+    (cond
+      ((eq architecture :x86-64)
+       (or (and (member mnemonic (list "XCHG" "XADD" "CMPXCHG")
+                        :test (function string=))
+                (member normalized-register normalized-operands
+                        :test (function string=)))
+           (and (equal normalized-register (first normalized-operands))
+                (not (member mnemonic
+                             (list "CMP" "TEST" "PUSH" "PUSHQ" "CALL" "CALLQ"
+                                   "JMP" "JMPQ" "JMPW" "RET" "NOP" "BT"
+                                   "LOOP" "LOOPE" "LOOPZ" "LOOPNE" "LOOPNZ")
+                             :test (function string=))))))
+      ((eq architecture :arm64)
+       (and (equal normalized-register (first normalized-operands))
+            (not (or (member mnemonic
+                             (list "CMP" "CMN" "TST" "TEQ" "RET" "BR" "BLR"
+                                   "BL" "CBZ" "CBNZ" "TBZ" "TBNZ"
+                                   "STR" "STRB" "STRH" "STP" "STNP" "STUR"
+                                   "STURB" "STURH" "STLR" "STLUR")
+                             :test (function string=))
+                     (and (> (length mnemonic) 1)
+                          (string= mnemonic "B" :end1 1)))))))))
 
 (defun %gcm-disassembly-increment-updates-counter-p (records record
                                                              counter
                                                              architecture
                                                              step
+                                                             target-index
                                                              branch-index)
   (let* ((index (getf record :index))
          (operands (getf record :operands))
@@ -205,119 +208,183 @@
           (case architecture
             (:x86-64 (equal destination normalized-counter))
             (:arm64 (equal source normalized-counter))))
+         (next-instruction
+          (and (eq architecture :arm64)
+               (find-if
+                (lambda (next)
+                  (and (> (getf next :index) index)
+                       (< (getf next :index) branch-index)
+                       (getf next :mnemonic)))
+                records)))
          (counter-result-p
           (or (equal destination normalized-counter)
-              (and (eq architecture :arm64)
-                   (let ((next-instruction
-                          (find-if
-                           (lambda (next)
-                             (and (> (getf next :index) index)
-                                  (< (getf next :index) branch-index)
-                                  (getf next :mnemonic)))
-                           records)))
-                     (and next-instruction
-                          (equal (getf next-instruction :mnemonic) "MOV")
-                          (equal normalized-counter
-                                 (%gcm-disassembly-normalize-register
-                                  (first (getf next-instruction :operands))
-                                  architecture))
-                          (equal destination
-                                 (%gcm-disassembly-normalize-register
-                                  (second (getf next-instruction :operands))
-                                  architecture))))))))
-    (and (< index branch-index)
+              (and next-instruction
+                   (equal (getf next-instruction :mnemonic) "MOV")
+                   (equal normalized-counter
+                          (%gcm-disassembly-normalize-register
+                           (first (getf next-instruction :operands))
+                           architecture))
+                   (equal destination
+                          (%gcm-disassembly-normalize-register
+                           (second (getf next-instruction :operands))
+                           architecture)))))
+         (counter-writes
+          (remove-if-not
+           (lambda (candidate)
+             (let ((candidate-index (getf candidate :index)))
+               (and (<= target-index candidate-index)
+                    (< candidate-index branch-index)
+                    (%gcm-disassembly-register-write-p
+                     candidate counter architecture))))
+           records))
+         (counter-writes-p
+          (or (and (equal destination normalized-counter)
+                   (= (length counter-writes) 1)
+                   (= (getf (first counter-writes) :index) index))
+              (and next-instruction
+                   (not (equal destination normalized-counter))
+                   (= (length counter-writes) 1)
+                   (= (getf (first counter-writes) :index)
+                      (getf next-instruction :index))))))
+    (and (< target-index index)
+         (< index branch-index)
          (equal (getf record :mnemonic) "ADD")
          (member step (mapcar #'%gcm-disassembly-number operands))
          counter-update-p
-         counter-result-p)))
+         counter-result-p
+         counter-writes-p)))
 
 (defun %gcm-disassembly-fixed-loop-p (records architecture bound step)
-  (let ((branches
-         (remove-if-not
-          (lambda (record)
-            (and (getf record :mnemonic)
-                 (%gcm-disassembly-conditional-branch-p (getf record :mnemonic)
-                                                        architecture)))
-          records)))
-    (and (= (length branches) 1)
-         (let* ((branch (first branches))
-                (branch-mnemonic (getf branch :mnemonic))
-                (branch-index (getf branch :index))
-                (target (first (getf branch :operands)))
-                (target-record
-                 (find target
-                       records
-                       :key
-                       (lambda (record)
-                         (getf record :label))
-                       :test
-                       #'equal))
-                (target-index (and target-record (getf target-record :index)))
-                (previous-instruction
-                 (car
-                  (last
-                   (remove-if-not
-                    (lambda (record)
-                      (and (< (getf record :index) branch-index)
-                           (getf record :mnemonic)))
-                    records))))
-                (compare-operands
-                 (and previous-instruction
-                      (equal (getf previous-instruction :mnemonic) "CMP")
-                      (getf previous-instruction :operands)))
-                (counter (first compare-operands))
-                (compare-bound (second compare-operands))
-                (fixed-bound
-                 (and counter
-                      (= (or (%gcm-disassembly-number compare-bound) -1) bound)))
-                (fixed-increment
-                 (and counter
-                      (some
-                       (lambda (record)
-                         (and target-index
-                              (< target-index (getf record :index))
-                              (%gcm-disassembly-increment-updates-counter-p
-                               records
-                               record
-                               counter
-                               architecture
-                               step
-                               branch-index)))
-                       records)))
-                (zero-initialized
-                 (and target-index
-                      counter
-                      (let ((normalized-counter
-                             (%gcm-disassembly-normalize-register counter
-                                                                  architecture)))
+  (labels ((x86-scaled-counter-source (records branch-index compare-counter)
+             (let* ((instructions
+                     (remove-if-not
+                      (lambda (record)
+                        (and (< (getf record :index) branch-index)
+                             (getf record :mnemonic)))
+                      records))
+                    (last-three (last instructions 3))
+                    (move (first last-three))
+                    (shift (second last-three))
+                    (compare (third last-three))
+                    (move-operands (and move (getf move :operands)))
+                    (shift-operands (and shift (getf shift :operands)))
+                    (compare-operands (and compare (getf compare :operands)))
+                    (counter-source (second move-operands)))
+               (when (and (= (length last-three) 3)
+                          (equal (getf move :mnemonic) "MOV")
+                          (equal (first move-operands) compare-counter)
+                          (equal (getf shift :mnemonic) "SAR")
+                          (equal (first shift-operands) compare-counter)
+                          (= (or (%gcm-disassembly-number
+                                  (second shift-operands))
+                                 -1)
+                             1)
+                          (equal (getf compare :mnemonic) "CMP")
+                          (equal (first compare-operands) compare-counter))
+                 counter-source))))
+    (let ((branches
+           (remove-if-not
+            (lambda (record)
+              (and (getf record :mnemonic)
+                   (%gcm-disassembly-conditional-branch-p
+                    (getf record :mnemonic)
+                    architecture)))
+            records)))
+      (and (= (length branches) 1)
+           (let* ((branch (first branches))
+                  (branch-mnemonic (getf branch :mnemonic))
+                  (branch-index (getf branch :index))
+                  (target (first (getf branch :operands)))
+                  (target-record
+                   (find target
+                         records
+                         :key
+                         (lambda (record)
+                           (getf record :label))
+                         :test
+                         (function equal)))
+                  (target-index (and target-record (getf target-record :index)))
+                  (previous-instruction
+                   (car
+                    (last
+                     (remove-if-not
+                      (lambda (record)
+                        (and (< (getf record :index) branch-index)
+                             (getf record :mnemonic)))
+                      records))))
+                  (compare-operands
+                   (and previous-instruction
+                        (equal (getf previous-instruction :mnemonic) "CMP")
+                        (getf previous-instruction :operands)))
+                  (compare-counter (first compare-operands))
+                  (compare-bound (second compare-operands))
+                  (scaled-counter
+                   (and (eq architecture :x86-64)
+                        (string= branch-mnemonic "JNE")
+                        (x86-scaled-counter-source records
+                                                  branch-index
+                                                  compare-counter)))
+                  (counter (or scaled-counter compare-counter))
+                  (fixed-bound
+                   (and counter
+                        (if scaled-counter
+                            (and (evenp bound)
+                                 (= (or (%gcm-disassembly-number compare-bound)
+                                        -1)
+                                    (/ bound 2)))
+                            (= (or (%gcm-disassembly-number compare-bound) -1)
+                               bound))))
+                  (fixed-increment
+                   (and counter
                         (some
                          (lambda (record)
-                           (and (< (getf record :index) target-index)
-                                (%gcm-disassembly-zero-initializer-p record
-                                                                     counter
-                                                                     architecture)
-                                (not
-                                 (some
-                                  (lambda (later)
-                                    (and
-                                     (< (getf record :index)
-                                        (getf later :index))
-                                     (< (getf later :index) target-index)
-                                     (some
-                                      (lambda (operand)
-                                        (equal normalized-counter
-                                               (%gcm-disassembly-normalize-register
-                                                operand
-                                                architecture)))
-                                      (getf later :operands))))
-                                  records))))
-                         records)))))
-           (and target-index
-                (< target-index branch-index)
-                (%gcm-disassembly-loop-branch-p branch-mnemonic architecture)
-                fixed-bound
-                fixed-increment
-                zero-initialized)))))
+                           (and target-index
+                                (< target-index (getf record :index))
+                                (%gcm-disassembly-increment-updates-counter-p
+  records
+  record
+  counter
+  architecture
+  step
+  target-index
+  branch-index)))
+                         records)))
+                  (zero-initialized
+                   (and target-index
+                        counter
+                        (let ((normalized-counter
+                               (%gcm-disassembly-normalize-register
+                                counter
+                                architecture)))
+                          (some
+                           (lambda (record)
+                             (and (< (getf record :index) target-index)
+                                  (%gcm-disassembly-zero-initializer-p
+                                   record
+                                   counter
+                                   architecture)
+                                  (not
+                                   (some
+                                    (lambda (later)
+                                      (and
+                                       (< (getf record :index)
+                                          (getf later :index))
+                                       (< (getf later :index) target-index)
+                                       (some
+                                        (lambda (operand)
+                                          (equal normalized-counter
+                                                 (%gcm-disassembly-normalize-register
+                                                  operand
+                                                  architecture)))
+                                        (getf later :operands))))
+                                    records))))
+                           records)))))
+             (and target-index
+                  (< target-index branch-index)
+                  (%gcm-disassembly-loop-branch-p branch-mnemonic architecture)
+                  fixed-bound
+                  fixed-increment
+                  zero-initialized))))))
 
 (defun %gcm-disassembly-allocation-p (text)
   (let ((text (string-upcase text)))
