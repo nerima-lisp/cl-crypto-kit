@@ -125,11 +125,30 @@
          (parse-integer number-text :junk-allowed t)))))
 
 (defun %gcm-disassembly-normalize-register (word architecture)
-  (if (and (eq architecture :x86-64)
-           (> (length word) 1)
-           (char= (char word (1- (length word))) #\D))
-      (subseq word 0 (1- (length word)))
-      word))
+  (case architecture
+    (:x86-64
+     (or (cdr (assoc word
+                     (list (cons "EAX" "RAX") (cons "AX" "RAX") (cons "AL" "RAX") (cons "AH" "RAX")
+                           (cons "EBX" "RBX") (cons "BX" "RBX") (cons "BL" "RBX") (cons "BH" "RBX")
+                           (cons "ECX" "RCX") (cons "CX" "RCX") (cons "CL" "RCX") (cons "CH" "RCX")
+                           (cons "EDX" "RDX") (cons "DX" "RDX") (cons "DL" "RDX") (cons "DH" "RDX")
+                           (cons "ESI" "RSI") (cons "SI" "RSI") (cons "SIL" "RSI")
+                           (cons "EDI" "RDI") (cons "DI" "RDI") (cons "DIL" "RDI")
+                           (cons "EBP" "RBP") (cons "BP" "RBP") (cons "BPL" "RBP")
+                           (cons "ESP" "RSP") (cons "SP" "RSP") (cons "SPL" "RSP"))
+                     :test (function string=)))
+         (if (and (>= (length word) 3)
+                  (string= word "R" :end1 1)
+                  (find (char word (1- (length word))) "DWB"))
+             (subseq word 0 (1- (length word)))
+             word)))
+    (:arm64
+     (if (and (> (length word) 1)
+              (string= word "W" :end1 1)
+              (every (function digit-char-p) (subseq word 1)))
+         (concatenate (quote string) "X" (subseq word 1))
+         word))
+    (otherwise word)))
 
 (defun %gcm-disassembly-zero-initializer-p (record counter architecture)
   (let* ((mnemonic (getf record :mnemonic))
