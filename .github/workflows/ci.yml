@@ -4,11 +4,24 @@ jobs:
   check:
     strategy:
       matrix:
-        os: [ubuntu-24.04]
+        include:
+          - os: ubuntu-24.04
+            system: x86_64-linux
+          - os: ubuntu-24.04-arm
+            system: aarch64-linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16
+        id: nix-installer
       - run: nix flake check
-      - run: "nix log .#checks.x86_64-linux.test | grep -E 'cl-crypto-kit: Signature checks [1-9][0-9]* passed'"
+      - name: Report check logs and counts
+        if: always() && steps.nix-installer.outcome == 'success'
+        run: |
+          test_log="$RUNNER_TEMP/cl-crypto-kit-check.log"
+          nix log ".#checks.${{ matrix.system }}.test" > "$test_log"
+          grep -E '^;|cl-crypto-kit: AES-GCM disassembly' "$test_log"
+          grep -E 'cl-crypto-kit: AES-GCM disassembly assertions [1-9][0-9]* passed \((x86-64|arm64)\)' "$test_log"
+          grep -E 'cl-crypto-kit: AES-GCM disassembly positive control rejected generic arithmetic' "$test_log"
+          grep -E 'cl-crypto-kit: Signature checks [1-9][0-9]* passed' "$test_log"
       - run: nix flake check --no-build

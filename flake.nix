@@ -12,12 +12,15 @@
   outputs = { self, nixpkgs, cl-weave, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-linux" ];
+      checkSystems = systems ++ [ "aarch64-linux" ];
       asd = builtins.readFile ./cl-crypto-kit.asd;
       version = builtins.elemAt
         (builtins.split "\""
           (builtins.elemAt (builtins.split ":version \"" asd) 2)) 0;
       forEachSystem = function:
         nixpkgs.lib.genAttrs systems (system: function system (import nixpkgs { inherit system; }));
+      forEachCheckSystem = function:
+        nixpkgs.lib.genAttrs checkSystems (system: function system (import nixpkgs { inherit system; }));
     in {
       formatter = forEachSystem (system: pkgs: pkgs.nixfmt-tree);
       packages = forEachSystem (system: pkgs: {
@@ -44,21 +47,23 @@
           packages = [ cl-weave.packages.${system}.default pkgs.sbcl pkgs.coreutils pkgs.perl ];
         };
       });
-      checks = forEachSystem (system: pkgs:
+      checks = forEachCheckSystem (system: pkgs:
         let
-          clWeave = cl-weave.packages.${system}.default;
+          clWeaveSource = cl-weave.outPath;
           check = pkgs.runCommand "cl-crypto-kit-check" {
-            nativeBuildInputs = [ pkgs.sbcl pkgs.openssl clWeave ];
+            nativeBuildInputs = [ pkgs.sbcl pkgs.openssl ];
           } ''
             cp -r ${self} source
             export XDG_CACHE_HOME="$TMPDIR/cl-crypto-kit-cache"
-            export CL_SOURCE_REGISTRY="$PWD/source//:${clWeave}/share/common-lisp/source//"
+            export CL_SOURCE_REGISTRY="$PWD/source//:${clWeaveSource}//"
             cd source
             set -o pipefail
             test_log="$TMPDIR/cl-crypto-kit-test.log"
+            sbcl --version | tee "$test_log"
             sbcl --noinform --non-interactive \
               --eval '(require :asdf)' \
-              --eval '(asdf:test-system "cl-crypto-kit")' 2>&1 | tee "$test_log"
+              --eval '(asdf:test-system "cl-crypto-kit")' 2>&1 | tee -a "$test_log"
+            grep -Eq 'cl-crypto-kit: AES-GCM disassembly assertions [1-9][0-9]* passed \((x86-64|arm64)\)' "$test_log"
             grep -Eq 'RFC HMAC [1-9][0-9]*, RFC HKDF [1-9][0-9]* vectors passed' "$test_log"
             grep -Eq 'Wycheproof X25519 [1-9][0-9]*, Ed25519 [1-9][0-9]* vectors passed' "$test_log"
             grep -Eq 'cl-crypto-kit: Signature checks [1-9][0-9]* passed' "$test_log"

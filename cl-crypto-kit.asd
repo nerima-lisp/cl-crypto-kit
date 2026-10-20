@@ -17,7 +17,8 @@
 
 (asdf:defsystem "cl-crypto-kit/test"
   :depends-on ("cl-crypto-kit" "cl-weave") :pathname "t" :serial t
-  :components ((:file "package") (:file "runner") (:file "tests")
+  :components ((:file "package") (:file "tests-gcm-disassembly")
+               (:file "runner") (:file "tests")
                (:file "tests-hash") (:file "nist-shavs")
                (:file "tests-aes-gcm") (:file "wycheproof-aes-gcm")
                (:file "wycheproof-chacha") (:file "tests-chacha")

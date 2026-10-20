@@ -1,5 +1,6 @@
 (in-package #:crypto-kit/test)
 (defun run-tests ()
+  (run-gcm-disassembly-tests)
   (run-vector-tests)
   (setf *signature-test-count* 0)
   (run-ec-sign-keygen-tests)
