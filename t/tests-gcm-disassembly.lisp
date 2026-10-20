@@ -310,8 +310,8 @@
                                                 operand
                                                 architecture)))
                                       (getf later :operands))))
-                                  records)))
-                           records))))))
+                                  records))))
+                         records)))))
            (and target-index
                 (< target-index branch-index)
                 (%gcm-disassembly-loop-branch-p branch-mnemonic architecture)
