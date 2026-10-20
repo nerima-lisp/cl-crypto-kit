@@ -37,10 +37,10 @@
                  (not (search round-keys printed-context))
                  (not (search bitsliced-round-keys printed-context)))
       (error "AES context printing exposed a key schedule"))
-    (%aes-gcm-check (length sealed) 81 "AES-256 GCM four-block output length")
+    (%aes-gcm-check (length sealed) 81 "AES-256 GCM multi-block output length")
     (%aes-gcm-check (crypto-kit::aead-open :aes-256-gcm key nonce sealed aad)
                     plaintext
-                    "AES-256 GCM four-block round-trip")
+                    "AES-256 GCM multi-block round-trip")
     (format t "cl-crypto-kit: AES-GCM security regression tests passed (4 checks)~%")
     t))
 
