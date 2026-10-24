@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.2]
+
+- Batched AES-GCM counter processing across four blocks with bitsliced AES and used four 32-bit words for GHASH arithmetic.
+- Corrected bitsliced AES lane swaps to select 1-, 2-, and 4-bit shifts with masks.
+- Compared all 16 AES-GCM authentication-tag bytes in a fixed-count loop. Added x86-64 and
+  arm64 disassembly checks for `%gcm-mul-into`, `%gcm-bytes-to-words`, `%gcm-xor-into`, and
+  `%gcm-constant-time-equal`; each check rejects calls or tail-calls, non-fixed conditional
+  branches, and heap-allocation paths.
+- Redacted AES round-key schedules when printing AES contexts.
+
 ## [0.2.0] - 2026-10-19
 
 - Added deterministic ECDSA P-256/SHA-256 signing, Ed25519 signing, and APIs to derive public keys from private keys.
